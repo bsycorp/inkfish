@@ -1,0 +1,15 @@
+sudo: required
+services: docker
+language: minimal
+branches:
+  only:
+  - master
+script:
+  - DOCKER_CONTENT_TRUST=1 docker build .
+
+deploy:
+  provider: script
+  script: bash ./deploy.sh
+  on:
+    tags: true
+    repo: bsycorp/inkfish
