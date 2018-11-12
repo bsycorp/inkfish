@@ -4,11 +4,17 @@
 // Rather than vendor the whole of goproxy, we pull the code out of signer.go and modify it
 // for our needs here.
 
+// TODO: expiry in 2049 is not optimal...
+// TODO: caching
+// TODO: cache expiry policy / regeneration
+// TODO: any implications of stripPort? It's not correct but if we only allow 443 it's OK.
+
 // See also: https://github.com/elazarl/goproxy/pull/314
 
 package inkfish
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
@@ -99,16 +105,12 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 			template.Subject.CommonName = h
 		}
 	}
-	var csprng goproxy.CounterEncryptorRand
-	if csprng, err = goproxy.NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
-		return
-	}
 	var certpriv *rsa.PrivateKey
-	if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
+	if certpriv, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		return
 	}
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
 	return tls.Certificate{
