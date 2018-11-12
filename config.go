@@ -30,7 +30,7 @@ type UserEntry struct {
 	PasswordHash string
 }
 
-func ListContainsString(haystack []string, needle string) bool {
+func listContainsString(haystack []string, needle string) bool {
 	// Return true iff needle is present in haystack
 	for _, s := range haystack {
 		if s == needle {
@@ -73,11 +73,11 @@ func (c *Acl) Permits(from, method, url string) bool {
 	// Check whether an acl permits a request. 2 things must be true:
 	// 1) The requesting user must be present in the "From" list of the Acl
 	// 2) The request method and url must match one of the Acl entries
-	if !ListContainsString(c.From, from) {
+	if !listContainsString(c.From, from) {
 		return false
 	}
 	for _, e := range c.Entries {
-		if e.AllMethods || ListContainsString(e.Methods, method) {
+		if e.AllMethods || listContainsString(e.Methods, method) {
 			if e.Pattern.MatchString(url) {
 				return true
 			}
@@ -86,7 +86,7 @@ func (c *Acl) Permits(from, method, url string) bool {
 	return false
 }
 
-func ParseAclEntry(words []string) (*AclEntry, error) {
+func parseAclEntry(words []string) (*AclEntry, error) {
 	// Take a config line like ["url", "GET", ""] and turn it into an AclEntry
 	var aclUrl AclEntry
 	if len(words) != 2 && len(words) != 3 {
@@ -114,7 +114,7 @@ func ParseAclEntry(words []string) (*AclEntry, error) {
 	return &aclUrl, nil
 }
 
-func ParseAcl(lines []string) (*Acl, error) {
+func parseAcl(lines []string) (*Acl, error) {
 	// Take a list of config lines and turn it into an Acl
 	var aclConfig Acl
 	for line_no, l := range lines {
@@ -126,7 +126,7 @@ func ParseAcl(lines []string) (*Acl, error) {
 		if words[0] == "from" {
 			aclConfig.From = append(aclConfig.From, words[1:]...)
 		} else if words[0] == "url" {
-			newEntry, err := ParseAclEntry(words)
+			newEntry, err := parseAclEntry(words)
 			if err != nil {
 				return nil, errors.Wrap(err, fmt.Sprintf("config error at line: %v", line_no+1))
 			}
@@ -138,16 +138,16 @@ func ParseAcl(lines []string) (*Acl, error) {
 	return &aclConfig, nil
 }
 
-func LoadAclFromFile(data []byte) (*Acl, error) {
+func loadAclFromFile(data []byte) (*Acl, error) {
 	lines := strings.Split(string(data), "\n")
-	result, err := ParseAcl(lines)
+	result, err := parseAcl(lines)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error loading acls")
 	}
 	return result, nil
 }
 
-func LoadUsersFromFile(data []byte) ([]UserEntry, error) {
+func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 	var result []UserEntry
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -186,13 +186,13 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) (error) {
 			return errors.Wrapf(err, "failed read config file: %v", fullpath)
 		}
 		if filepath.Ext(fi.Name()) == ".conf" {
-			acl, err := LoadAclFromFile(data)
+			acl, err := loadAclFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
 			proxy.Acls = append(proxy.Acls, *acl)
 		} else if filepath.Ext(fi.Name()) == ".passwd" {
-			userRecords, err := LoadUsersFromFile(data)
+			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}

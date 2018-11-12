@@ -38,12 +38,11 @@ func NewInkfish() *Inkfish {
 	return &this
 }
 
-func DefaultConnectFilter(host string, port int) bool {
+func defaultConnectFilter(host string, port int) bool {
 	return port == 443
 }
 
-
-func ConnectDenied(req *http.Request) *http.Response {
+func connectDenied(req *http.Request) *http.Response {
 	return &http.Response{
 		StatusCode:    403,
 		ProtoMajor:    1,
@@ -65,7 +64,7 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		connectPort, err := strconv.Atoi(hostFields[1])
 		if err != nil {
 			ctx.Warnf("bad port in connect request for '%v': '%v'", host, connectPort)
-			ctx.Resp = ConnectDenied(ctx.Req)
+			ctx.Resp = connectDenied(ctx.Req)
 			return goproxy.RejectConnect, host
 		}
 
@@ -73,11 +72,11 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		if proxy.ConnectFilter != nil {
 			allowed = proxy.ConnectFilter(connectHost, connectPort)
 		} else {
-			allowed = DefaultConnectFilter(connectHost, connectPort)
+			allowed = defaultConnectFilter(connectHost, connectPort)
 		}
 		if !allowed {
 			ctx.Warnf("connect to %v port %v rejected by connect policy", host, connectPort)
-			ctx.Resp = ConnectDenied(ctx.Req)
+			ctx.Resp = connectDenied(ctx.Req)
 			return goproxy.RejectConnect, host
 		}
 

@@ -22,11 +22,11 @@ func TestCheckCredentials(t *testing.T) {
 }
 
 func TestParseAclUrl(t *testing.T) {
-	aclUrl, err := ParseAclEntry([]string{})
+	aclUrl, err := parseAclEntry([]string{})
 	assert.Nil(t, aclUrl)
 	assert.NotNil(t, err)
 
-	aclUrl, err = ParseAclEntry([]string{"foo", "bar", "baz"})
+	aclUrl, err = parseAclEntry([]string{"foo", "bar", "baz"})
 	assert.Nil(t, aclUrl)
 	assert.NotNil(t, err)
 
@@ -34,7 +34,7 @@ func TestParseAclUrl(t *testing.T) {
 
 	// 2-form
 	// url ^http://boards\.4chan\.org/b/
-	aclUrl, err = ParseAclEntry([]string{"url", url})
+	aclUrl, err = parseAclEntry([]string{"url", url})
 	assert.NotNil(t, aclUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, true, aclUrl.AllMethods)
@@ -43,7 +43,7 @@ func TestParseAclUrl(t *testing.T) {
 
 	// 3-form
 	// url GET,POST,HEAD ^http://boards\.4chan\.org/b/
-	aclUrl, err = ParseAclEntry([]string{"url", "GET,POST,HEAD", url})
+	aclUrl, err = parseAclEntry([]string{"url", "GET,POST,HEAD", url})
 	assert.NotNil(t, aclUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, false, aclUrl.AllMethods)
@@ -52,14 +52,14 @@ func TestParseAclUrl(t *testing.T) {
 }
 
 func TestBrokenAclConfigs(t *testing.T) {
-	aclConfig, err := ParseAcl([]string{
+	aclConfig, err := parseAcl([]string{
 		"klaatu", "barada", "nikto",
 	})
 	assert.Nil(t, aclConfig)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "line: 1")
 
-	aclConfig, err = ParseAcl([]string{
+	aclConfig, err = parseAcl([]string{
 		"from foo",
 		"url SOME THING WRONG",
 	})
@@ -69,7 +69,7 @@ func TestBrokenAclConfigs(t *testing.T) {
 }
 
 func TestAclConfig(t *testing.T) {
-	aclConfig, err := ParseAcl([]string{
+	aclConfig, err := parseAcl([]string{
 		"from foo",
 		"from bar",
 		"url ^http(s)?://google.com/",

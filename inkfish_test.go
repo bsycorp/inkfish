@@ -98,7 +98,7 @@ func getExpect(t *testing.T, client *http.Client, url string, expectCode int, ex
 }
 
 func MustParseAcl(s string) Acl {
-	r, err := ParseAcl(strings.Split(s, "\n"))
+	r, err := parseAcl(strings.Split(s, "\n"))
 	if err != nil {
 		panic(err)
 	}
