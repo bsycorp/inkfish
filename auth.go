@@ -11,7 +11,7 @@ import (
 
 const ProxyAuthorizationHeader = "Proxy-Authorization"
 
-func ParseProxyAuth(headerValue string) (string, string, error) {
+func parseProxyAuth(headerValue string) (string, string, error) {
 	authheader := strings.SplitN(headerValue, " ", 2)
 	if len(authheader) != 2 || authheader[0] != "Basic" {
 		return "", "", errors.New("expected Basic auth")
@@ -54,7 +54,7 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string) {
 			// TODO: logging
 			return "INVALID"
 		}
-		hdrUser, hdrPass, err := ParseProxyAuth(req.Header.Get(ProxyAuthorizationHeader))
+		hdrUser, hdrPass, err := parseProxyAuth(req.Header.Get(ProxyAuthorizationHeader))
 		if err != nil {
 			// TODO: logging
 			return "INVALID" // Something was wrong with the header
@@ -62,7 +62,7 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string) {
 		// We never want proxy-auth to be forwarded to an origin server
 		req.Header.Del(ProxyAuthorizationHeader)
 		if hdrUser != "" {
-			if proxy.CredentialsAreValid(hdrUser, hdrPass) {
+			if proxy.credentialsAreValid(hdrUser, hdrPass) {
 				return hdrUser
 			}
 		}

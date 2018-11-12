@@ -16,9 +16,9 @@ func TestCheckCredentials(t *testing.T) {
 			},
 		},
 	}
-	assert.False(t, proxy.CredentialsAreValid("bar", "bar"))
-	assert.False(t, proxy.CredentialsAreValid("foo", "bar"))
-	assert.True(t, proxy.CredentialsAreValid("foo", "foo"))
+	assert.False(t, proxy.credentialsAreValid("bar", "bar"))
+	assert.False(t, proxy.credentialsAreValid("foo", "bar"))
+	assert.True(t, proxy.credentialsAreValid("foo", "foo"))
 }
 
 func TestParseAclUrl(t *testing.T) {
@@ -78,11 +78,11 @@ func TestAclConfig(t *testing.T) {
 	assert.NotNil(t, aclConfig)
 	assert.Nil(t, err)
 
-	assert.True(t, aclConfig.Permits("foo", "GET", "https://google.com/"))
-	assert.True(t, aclConfig.Permits("bar", "GET", "https://google.com/"))
-	assert.False(t, aclConfig.Permits("baz", "GET", "https://google.com/"))
-	assert.True(t, aclConfig.Permits("foo", "GET", "https://yahoo.com/"))
-	assert.False(t, aclConfig.Permits("foo", "POST", "https://yahoo.com/"))
+	assert.True(t, aclConfig.permits("foo", "GET", "https://google.com/"))
+	assert.True(t, aclConfig.permits("bar", "GET", "https://google.com/"))
+	assert.False(t, aclConfig.permits("baz", "GET", "https://google.com/"))
+	assert.True(t, aclConfig.permits("foo", "GET", "https://yahoo.com/"))
+	assert.False(t, aclConfig.permits("foo", "POST", "https://yahoo.com/"))
 }
 
 func TestLoadConfig(t *testing.T) {

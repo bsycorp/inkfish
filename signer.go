@@ -9,7 +9,9 @@
 // TODO: cache expiry policy / regeneration
 // TODO: any implications of stripPort? It's not correct but if we only allow 443 it's OK.
 
-// See also: https://github.com/elazarl/goproxy/pull/314
+// See also: https://github.com/elazarl/goproxy/pull/314 -
+// And: https://github.com/elazarl/goproxy/pull/284 - We add cert caching in a different way.
+// And: https://github.com/elazarl/goproxy/pull/256 - This could be important; there's an fd leak
 
 package inkfish
 

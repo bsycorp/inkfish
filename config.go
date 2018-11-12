@@ -40,17 +40,17 @@ func listContainsString(haystack []string, needle string) bool {
 	return false
 }
 
-func (c *Inkfish) Permits(from, method, url string) bool {
+func (c *Inkfish) permits(from, method, url string) bool {
 	// Check each acl in the config to see if it permits the request
 	for _, aclConfig := range c.Acls {
-		if aclConfig.Permits(from, method, url) {
+		if aclConfig.permits(from, method, url) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *Inkfish) CredentialsAreValid(user, password string) bool {
+func (c *Inkfish) credentialsAreValid(user, password string) bool {
 	// Check each UserEntry to see if it matches the provided credentials
 	hashedPw := sha256.Sum256([]byte(password))
 	for _, ent := range c.Passwd {
@@ -69,7 +69,7 @@ func (c *Inkfish) CredentialsAreValid(user, password string) bool {
 	return false
 }
 
-func (c *Acl) Permits(from, method, url string) bool {
+func (c *Acl) permits(from, method, url string) bool {
 	// Check whether an acl permits a request. 2 things must be true:
 	// 1) The requesting user must be present in the "From" list of the Acl
 	// 2) The request method and url must match one of the Acl entries

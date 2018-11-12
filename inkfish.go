@@ -132,7 +132,7 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 			// TODO: check for "domain fronting"
 			req.URL.Host = req.Host
 		}
-		if proxy.Permits(user, req.Method, req.URL.String()) {
+		if proxy.permits(user, req.Method, req.URL.String()) {
 			return req, nil // Allow the request
 		}
 		return req, deniedResponse
