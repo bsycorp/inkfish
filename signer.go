@@ -16,14 +16,13 @@ package inkfish
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"github.com/elazarl/goproxy"
 	"math/big"
 	"net"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -55,21 +54,29 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *goproxy.ProxyCt
 	}
 }
 
-var goproxySignerVersion = ":goroxy1"
+var signerVersion = ":inkfish1"
 
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
 	copy(c, lst)
 	sort.Strings(c)
-	h := sha1.New()
+	h := sha256.New()
 	for _, s := range c {
 		h.Write([]byte(s + ","))
 	}
 	return h.Sum(nil)
 }
 
+var certCache = map[string]tls.Certificate{}
+
 func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
+
+	// Fast path; is it cached?
+	hash := hashSorted(append(hosts, signerVersion))
+	if cachedCert, ok := certCache[string(hash)]; ok {
+		return cachedCert, nil
+	}
 
 	// Use the provided ca and not the global GoproxyCa for certificate generation.
 	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
@@ -80,15 +87,19 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	if err != nil {
 		panic(err)
 	}
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
+
+	randomSerial := make([]byte, 20)
+	_, err = rand.Read(randomSerial)
+	if err != nil {
+		panic(err)
+	}
 	serial := new(big.Int)
-	serial.SetBytes(hash)
+	serial.SetBytes(randomSerial)
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
-			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
+			Organization: []string{"Inkfish MITM Proxy"},
 		},
 		NotBefore: start,
 		NotAfter:  end,
@@ -113,8 +124,11 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
-	return tls.Certificate{
+	leafCert := tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
-	}, nil
+	}
+	certCache[string(hash)] = leafCert
+
+	return leafCert, nil
 }
