@@ -27,6 +27,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -70,13 +71,17 @@ func hashSorted(lst []string) []byte {
 }
 
 var certCache = map[string]tls.Certificate{}
+var cacheMutex = &sync.Mutex{}
 
 func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 
 	// Fast path; is it cached?
 	hash := hashSorted(append(hosts, signerVersion))
-	if cachedCert, ok := certCache[string(hash)]; ok {
+	cacheMutex.Lock()
+	cachedCert, found := certCache[string(hash)]
+	cacheMutex.Unlock()
+	if found {
 		return cachedCert, nil
 	}
 
@@ -130,7 +135,9 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
 	}
+	cacheMutex.Lock()
 	certCache[string(hash)] = leafCert
+	cacheMutex.Unlock()
 
 	return leafCert, nil
 }
