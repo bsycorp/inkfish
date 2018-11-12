@@ -41,7 +41,9 @@ func getRemoteIP(remoteAddr string) (string, error) {
 	return m[1], nil
 }
 
-func (proxy *Inkfish) authenticateClient(req *http.Request) (string) {
+const badUser = "INVALID"
+
+func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 	ip, err := getRemoteIP(req.RemoteAddr)
 	if err != nil {
 		panic(err)
@@ -49,31 +51,26 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string) {
 	// Check for client-supplied creds first
 	if _, hasAuthHdr := req.Header[ProxyAuthorizationHeader]; hasAuthHdr {
 		authHdr := req.Header[ProxyAuthorizationHeader]
+		req.Header.Del(ProxyAuthorizationHeader)  // Never forward to an origin server
 		if len(authHdr) != 1 {
-			// Multiple proxy auth headers. Get outta here.
-			// TODO: logging
-			return "INVALID"
+			return badUser, errors.New("denying request due to multiple proxy-auth headers")
 		}
-		hdrUser, hdrPass, err := parseProxyAuth(req.Header.Get(ProxyAuthorizationHeader))
+		hdrUser, hdrPass, err := parseProxyAuth(authHdr[0])
 		if err != nil {
-			// TODO: logging
-			return "INVALID" // Something was wrong with the header
+			// log.Println("|" + authHdr[0] + "|")
+			return badUser, errors.Wrap(err, "could not understand proxy-auth header ")
 		}
-		// We never want proxy-auth to be forwarded to an origin server
-		req.Header.Del(ProxyAuthorizationHeader)
-		if hdrUser != "" {
-			if proxy.credentialsAreValid(hdrUser, hdrPass) {
-				return hdrUser
-			}
+		if proxy.credentialsAreValid(hdrUser, hdrPass) {
+			return hdrUser, nil
 		}
-		return "INVALID" // They tried, and they failed
+		return badUser, errors.New("authentication failed")
 	}
 	// Fall back on metadata lookup
 	if proxy.MetadataProvider != nil {
 		if tag, ok := proxy.MetadataProvider.Lookup(ip); ok {
-			return fmt.Sprintf("tag:%v", tag)
+			return fmt.Sprintf("tag:%v", tag), nil
 		}
 	}
 	// No creds and no metadata, client is anonymous
-	return "ANONYMOUS"
+	return "ANONYMOUS", nil
 }

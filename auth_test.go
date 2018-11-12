@@ -66,7 +66,9 @@ func TestAuthenticateClientByValidCreds(t *testing.T) {
 	}
 	req := templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmZvbw==")
-	assert.Equal(t, "foo", proxy.authenticateClient(req))
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, "foo", res)
+	assert.Nil(t, err)
 }
 
 func TestAuthenticateClientByInvalidCreds(t *testing.T) {
@@ -78,15 +80,21 @@ func TestAuthenticateClientByInvalidCreds(t *testing.T) {
 	}
 	req := templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmJhcg==")
-	assert.Equal(t, "INVALID", proxy.authenticateClient(req))
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, "INVALID", res)
+	assert.NotNil(t, err)
 
 	req = templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "")
-	assert.Equal(t, "INVALID", proxy.authenticateClient(req))
+	res, err = proxy.authenticateClient(req)
+	assert.Equal(t, "INVALID", res)
+	assert.NotNil(t, err)
 
 	req = templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic 1fnord1!!")
-	assert.Equal(t, "INVALID", proxy.authenticateClient(req))
+	res, err = proxy.authenticateClient(req)
+	assert.Equal(t, "INVALID", res)
+	assert.NotNil(t, err)
 }
 
 func TestAuthenticateClientAnonymous(t *testing.T) {
@@ -94,7 +102,9 @@ func TestAuthenticateClientAnonymous(t *testing.T) {
 	// user should be ANONYMOUS
 	req := templateHttpRequest()
 	proxy := NewInkfish()
-	assert.Equal(t, "ANONYMOUS", proxy.authenticateClient(req))
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, "ANONYMOUS", res)
+	assert.Nil(t, err)
 }
 
 type testMetadataProvider struct {}
@@ -114,14 +124,20 @@ func TestAuthenticateClientByMetadata(t *testing.T) {
 
 	req := templateHttpRequest()
 	req.RemoteAddr = "155.144.114.41:31337"
-	assert.Equal(t, "tag:bojangles", proxy.authenticateClient(req))
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, "tag:bojangles", res)
+	assert.Nil(t, err)
 
 	req = templateHttpRequest()
 	req.RemoteAddr = "49.3.5.163:31337"
-	assert.Equal(t, "tag:snood", proxy.authenticateClient(req))
+	res, err = proxy.authenticateClient(req)
+	assert.Equal(t, "tag:snood", res)
+	assert.Nil(t, err)
 
 	// If the client "falls through" the metadata provider, they are ANONYMOUS
 	req = templateHttpRequest()
 	req.RemoteAddr = "8.8.8.8:31337"
-	assert.Equal(t, "ANONYMOUS", proxy.authenticateClient(req))
+	res, err = proxy.authenticateClient(req)
+	assert.Equal(t, "ANONYMOUS", res)
+	assert.Nil(t, err)
 }

@@ -79,7 +79,8 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			allowed = defaultConnectFilter(connectHost, connectPort)
 		}
 		if !allowed {
-			ctx.Warnf("connect to %v port %v rejected by connect policy", host, connectPort)
+			ctx.Warnf("client: %v: connect to %v port %v rejected by connect policy",
+				ctx.Req.RemoteAddr, connectHost, connectPort)
 			ctx.Resp = connectDenied(ctx.Req)
 			return RejectConnect, host
 		}
@@ -88,8 +89,11 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		// checks at the point of request. However, if the client has sent a proxy auth header,
 		// we need to read that out now as it will not be sent on "tunneled" HTTP requests.
 
-		user := proxy.authenticateClient(ctx.Req)
-
+		var user string
+		user, err = proxy.authenticateClient(ctx.Req)
+		if err != nil {
+			ctx.Warnf("client: %v: authentication error during connect: %v", ctx.Req.RemoteAddr, err)
+		}
 		// Stash the authenticated username against the proxy context
 		userData := map[string]string{
 			"user": user,
@@ -116,7 +120,11 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 		} else if req.URL.Scheme == "http" {
 			// This is not a tunneled request so we invoke our auth logic for
 			// the specific request.
-			user = proxy.authenticateClient(req)
+			var err error
+			user, err = proxy.authenticateClient(req)
+			if err != nil {
+				ctx.Warnf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
+			}
 		} else {
 			// We don't support ftp://, gopher:// etc.
 			return req, deniedResponse
