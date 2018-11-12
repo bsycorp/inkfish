@@ -62,14 +62,14 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		hostFields := strings.Split(host, ":")
 		if len(hostFields) != 2 {
 			ctx.Warnf("bad connect request for '%v'", host)
-			return goproxy.RejectConnect, host
+			return RejectConnect, host
 		}
 		connectHost := hostFields[0]
 		connectPort, err := strconv.Atoi(hostFields[1])
 		if err != nil {
 			ctx.Warnf("bad port in connect request for '%v': '%v'", host, connectPort)
 			ctx.Resp = connectDenied(ctx.Req)
-			return goproxy.RejectConnect, host
+			return RejectConnect, host
 		}
 
 		var allowed bool
@@ -81,7 +81,7 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		if !allowed {
 			ctx.Warnf("connect to %v port %v rejected by connect policy", host, connectPort)
 			ctx.Resp = connectDenied(ctx.Req)
-			return goproxy.RejectConnect, host
+			return RejectConnect, host
 		}
 
 		// We allow all CONNECT calls to safe ports (e.g. 443) but perform access control
@@ -96,7 +96,7 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			"host": host,
 		}
 		ctx.UserData = userData
-		return goproxy.MitmConnect, host
+		return MitmConnect, host
 	})
 }
 
