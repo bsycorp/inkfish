@@ -2,6 +2,7 @@ package inkfish
 
 import (
 	"bytes"
+	"crypto/tls"
 	"github.com/elazarl/goproxy"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +16,10 @@ const AccessDenied = `
 ************************
 `
 
+// Set this to true if you want the proxy's HTTP client to ignore TLS errors.
+// Not recommended...
+var ClientInsecureSkipVerify = false
+
 type Inkfish struct {
 	Acls          []Acl
 	Passwd        []UserEntry
@@ -23,16 +28,15 @@ type Inkfish struct {
 	Proxy            *goproxy.ProxyHttpServer
 }
 
-type ConfigOptions struct {
-	ConfigDir     string
-	CaCert        string
-	CaKey         string
-	ListenAddress string
-}
-
 func NewInkfish() *Inkfish {
 	var this Inkfish
+	clientTlsConfig := &tls.Config{InsecureSkipVerify: ClientInsecureSkipVerify}
+	clientTransport := &http.Transport{
+		TLSClientConfig: clientTlsConfig,
+		Proxy: http.ProxyFromEnvironment,
+	}
 	this.Proxy = goproxy.NewProxyHttpServer()
+	this.Proxy.Tr = clientTransport
 	this.Proxy.OnRequest().HandleConnect(onConnect(&this))
 	this.Proxy.OnRequest().Do(onRequest(&this))
 	return &this

@@ -45,11 +45,19 @@ func init() {
 // PROXY TEST HARNESS
 // -------------------
 
+func NewInsecureInkfish() (*Inkfish) {
+	// Disable client's TLS validation so we can connect to the test server
+	ClientInsecureSkipVerify = true
+	r := NewInkfish()
+	// Allow CONNECT to any port, not just 443
+	r.ConnectFilter = connectFilterAllowAny
+	return r
+}
+
 // A test instance of an Inkfish proxy
 type InkfishTestServer struct {
 	Server *httptest.Server
 }
-
 
 func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
 	testServer := &InkfishTestServer{}
@@ -61,7 +69,7 @@ func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
 func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
 	proxyUrl, _ := url.Parse(it.Server.URL)
 	proxyUrl.User = userInfo
-	acceptAllCerts := &tls.Config{InsecureSkipVerify: true}
+	acceptAllCerts := &tls.Config{InsecureSkipVerify: true} // TODO: verify against own CA?
 	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
 	return &http.Client{Transport: tr}
 }
@@ -169,10 +177,9 @@ func TestAllowFooNotBar(t *testing.T) {
 		from tag:me
 		url ^.*/foo$
 	`)
-	proxy := NewInkfish()
+	proxy := NewInsecureInkfish()
 	proxy.MetadataProvider = &LocalHostIsMeMetadataProvider{}
 	proxy.Acls = []Acl{acl1}
-	proxy.ConnectFilter = connectFilterAllowAny
 	s := NewInkfishTest(proxy)
 	defer s.Close()
 
@@ -193,9 +200,8 @@ func TestAllowWithAuth(t *testing.T) {
 		from bar
 		url ^.*/bar$
 	`)
-	proxy := NewInkfish()
+	proxy := NewInsecureInkfish()
 	proxy.Acls = []Acl{acl1, acl2}
-	proxy.ConnectFilter = connectFilterAllowAny
 	proxy.Passwd = passwdFooBarBaz
 
 	s := NewInkfishTest(proxy)
@@ -253,9 +259,8 @@ func TestAnonymousAccess(t *testing.T) {
 		from ANONYMOUS
 		url ^.*/bar$
 	`)
-	proxy := NewInkfish()
+	proxy := NewInsecureInkfish()
 	proxy.Acls = []Acl{acl1, acl2}
-	proxy.ConnectFilter = connectFilterAllowAny
 	proxy.Passwd = passwdFooBarBaz
 
 	s := NewInkfishTest(proxy)
