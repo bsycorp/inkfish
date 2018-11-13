@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	tags "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
 	"github.com/pkg/errors"
+	"log"
 	"strings"
 )
 
@@ -13,7 +14,7 @@ var arnToIP = map[string]string{}
 func UpdateMetadataFromAWS(sess *session.Session, cache *MetadataCache) {
 	ipToTag, err := MakeIPToTagMap(sess,"ProxyUser")
 	if err != nil {
-		; // TODO: logging
+		log.Println("failed to read metadata: ", err) // TODO: logging
 	} else {
 		cache.Replace(ipToTag)
 	}
@@ -22,8 +23,7 @@ func UpdateMetadataFromAWS(sess *session.Session, cache *MetadataCache) {
 func MakeIPToTagMap(sess *session.Session, targetTag string) (map[string]string, error) {
 	arnToTag, err := getInstanceTagValues(sess, targetTag)
 	if err != nil {
-		// TODO: logging
-		return nil, err
+		return nil, errors.Wrap(err, "getting instance tag values")
 	}
 	ipToTag := map[string]string{}
 	for instanceId, instanceTagValue := range arnToTag {
@@ -31,7 +31,7 @@ func MakeIPToTagMap(sess *session.Session, targetTag string) (map[string]string,
 		if _, ok := arnToIP[instanceId]; !ok {
 			primaryIP, err := getInstancePrimaryIP(sess, instanceId)
 			if err != nil {
-				; // TODO: logging
+				return nil, errors.Wrap(err, "getting instance primary ip")
 			} else {
 				arnToIP[instanceId] = primaryIP
 			}
@@ -81,8 +81,6 @@ func getInstanceTagValues(sess *session.Session, targetTag string) (map[string]s
 }
 
 func getInstancePrimaryIP(sess *session.Session, instanceId string) (string, error) {
-	//	client := ec2.New(sess)
-	//	client.
 	svc := ec2.New(sess)
 	var input ec2.DescribeInstancesInput
 	input.SetInstanceIds([]*string{&instanceId})
