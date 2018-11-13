@@ -40,7 +40,8 @@ func GetMetadataMap(sess *session.Session, targetTag string) (map[string]string,
 		if _, ok := arnToIP[instanceId]; !ok {
 			primaryIP, err := getInstancePrimaryIP(sess, instanceId)
 			if err != nil {
-				return nil, errors.Wrap(err, "getting instance primary ip")
+				// log.Printf("%v error getting instance primary ip: %v", instanceId, err)
+				// Ignore this or we get flooded by messages about terminated instances
 			} else {
 				arnToIP[instanceId] = primaryIP
 			}
@@ -97,16 +98,12 @@ func getInstancePrimaryIP(sess *session.Session, instanceId string) (string, err
 	if err != nil {
 		return "", errors.Wrap(err, "describe instance failed")
 	}
-	if len(output.Reservations) != 1 {
-		return "", errors.Errorf("wrong number of reservations: %v", len(output.Reservations))
+	for _, res := range output.Reservations {
+		for _, inst := range res.Instances {
+			if inst.PrivateIpAddress != nil {
+				return *inst.PrivateIpAddress, nil
+			}
+		}
 	}
-	res := output.Reservations[0]
-	if len(res.Instances) != 1 {
-		return "", errors.Errorf("wrong number of instances: %v", len(res.Instances))
-	}
-	privateIP := res.Instances[0].PrivateIpAddress
-	if privateIP == nil || len(*privateIP) == 0 {
-		return "", errors.Errorf("no private ip found")
-	}
-	return *privateIP, nil
+	return "", errors.Errorf("failed to find private IP for instance: %v", instanceId)
 }
