@@ -6,21 +6,30 @@ import (
 	tags "github.com/aws/aws-sdk-go/service/resourcegroupstaggingapi"
 	"github.com/pkg/errors"
 	"log"
+	"reflect"
 	"strings"
 )
 
 var arnToIP = map[string]string{}
 
 func UpdateMetadataFromAWS(sess *session.Session, cache *MetadataCache) {
-	ipToTag, err := MakeIPToTagMap(sess,"ProxyUser")
+	ipToTag, err := GetMetadataMap(sess,"ProxyUser")
 	if err != nil {
 		log.Println("failed to read aws metadata: ", err)
 	} else {
-		cache.Replace(ipToTag)
+		if !reflect.DeepEqual(cache.cache, &ipToTag) {
+			log.Println("found updated metadata:")
+			for ip, tagValue := range ipToTag {
+				log.Printf("metadata: %v -> %v\n", ip, tagValue)
+			}
+			log.Println("end updated metadata")
+			cache.Replace(ipToTag)
+		}
 	}
 }
 
-func MakeIPToTagMap(sess *session.Session, targetTag string) (map[string]string, error) {
+// Construct a map from IP -> ProxyUser
+func GetMetadataMap(sess *session.Session, targetTag string) (map[string]string, error) {
 	arnToTag, err := getInstanceTagValues(sess, targetTag)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting instance tag values")
@@ -36,9 +45,8 @@ func MakeIPToTagMap(sess *session.Session, targetTag string) (map[string]string,
 				arnToIP[instanceId] = primaryIP
 			}
 		}
-		// Update our metadata map
+		// Update the metadata map (ip -> ProxyUser tag)
 		if instanceIP, ok := arnToIP[instanceId]; ok {
-			log.Printf("Found new metadata tag for IP: %v: %v\n", instanceIP, instanceTagValue)
 			ipToTag[instanceIP] = instanceTagValue
 		}
 	}
