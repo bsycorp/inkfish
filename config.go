@@ -15,8 +15,9 @@ import (
 const PasswordHashLen = 64 // Length of SHA-256 output, as hex chars
 
 type Acl struct {
-	From    []string
-	Entries []AclEntry
+	From       []string
+	Entries    []AclEntry
+	MitmBypass []string
 }
 
 type AclEntry struct {
@@ -40,10 +41,19 @@ func listContainsString(haystack []string, needle string) bool {
 	return false
 }
 
-func (c *Inkfish) permits(from, method, url string) bool {
+func (c *Inkfish) permitsRequest(from, method, url string) bool {
 	// Check each acl in the config to see if it permits the request
 	for _, aclConfig := range c.Acls {
 		if aclConfig.permits(from, method, url) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Inkfish) bypassMitm(from, hostAndPort string) bool {
+	for _, aclConfig := range c.Acls {
+		if aclConfig.bypassMitm(from, hostAndPort) {
 			return true
 		}
 	}
@@ -84,6 +94,13 @@ func (c *Acl) permits(from, method, url string) bool {
 		}
 	}
 	return false
+}
+
+func (c *Acl) bypassMitm(from, hostAndPort string) bool {
+	if !listContainsString(c.From, from) {
+		return false
+	}
+	return listContainsString(c.MitmBypass, hostAndPort)
 }
 
 func parseAclEntry(words []string) (*AclEntry, error) {
@@ -131,6 +148,8 @@ func parseAcl(lines []string) (*Acl, error) {
 				return nil, errors.Wrap(err, fmt.Sprintf("config error at line: %v", line_no+1))
 			}
 			aclConfig.Entries = append(aclConfig.Entries, *newEntry)
+		} else if words[0] == "bypass" {
+			aclConfig.MitmBypass = append(aclConfig.MitmBypass, words[1:]...)
 		} else {
 			return nil, errors.Errorf("unknown directive at line: %v", line_no+1)
 		}
@@ -162,14 +181,14 @@ func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 			continue
 		}
 		result = append(result, UserEntry{
-			Username: username,
+			Username:     username,
 			PasswordHash: passwordHash,
 		})
 	}
 	return result, nil
 }
 
-func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) (error) {
+func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 	// Load ACLs and passwd entries from a directory
 	files, err := ioutil.ReadDir(configDir)
 	if err != nil {

@@ -134,6 +134,12 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			"host": host,
 		}
 		ctx.UserData = userData
+
+		// Search for an MITM bypass directive
+
+		if proxy.bypassMitm(user, host) {
+			return proxy.Actions.OkConnect, host
+		}
 		return proxy.Actions.MitmConnect, host
 	})
 }
@@ -174,7 +180,7 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 			// TODO: check for "domain fronting"
 			req.URL.Host = req.Host
 		}
-		if proxy.permits(user, req.Method, req.URL.String()) {
+		if proxy.permitsRequest(user, req.Method, req.URL.String()) {
 			return req, nil // Allow the request
 		}
 		return req, deniedResponse

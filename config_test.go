@@ -85,6 +85,23 @@ func TestAclConfig(t *testing.T) {
 	assert.False(t, aclConfig.permits("foo", "POST", "https://yahoo.com/"))
 }
 
+func TestAclConfigWithBypass(t *testing.T) {
+	aclConfig, err := parseAcl([]string{
+		"from foo",
+		"from bar",
+		"url ^http(s)?://google.com/",
+		"url GET,HEAD ^http(s)?://yahoo.com/",
+		"bypass foo.com:443",
+		"bypass bar.com:443",
+	})
+	assert.NotNil(t, aclConfig)
+	assert.Nil(t, err)
+
+	assert.True(t, aclConfig.bypassMitm("foo", "foo.com:443"))
+	assert.True(t, aclConfig.bypassMitm("foo", "bar.com:443"))
+	assert.False(t, aclConfig.bypassMitm("baz", "foo.com:443"))
+}
+
 func TestLoadConfig(t *testing.T) {
 	proxy := NewInkfish()
 	err := proxy.LoadConfigFromDirectory("testdata/unit_test_config")
