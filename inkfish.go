@@ -3,7 +3,9 @@ package inkfish
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"github.com/elazarl/goproxy"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -21,25 +23,54 @@ const AccessDenied = `
 var ClientInsecureSkipVerify = false
 
 type Inkfish struct {
-	Acls          []Acl
-	Passwd        []UserEntry
-	ConnectFilter func(string, int) bool
+	Acls             []Acl
+	Passwd           []UserEntry
+	ConnectFilter    func(string, int) bool
 	MetadataProvider MetadataProvider
 	Proxy            *goproxy.ProxyHttpServer
+	Actions          *Actions
 }
+
 
 func NewInkfish() *Inkfish {
 	var this Inkfish
 	clientTlsConfig := &tls.Config{InsecureSkipVerify: ClientInsecureSkipVerify}
 	clientTransport := &http.Transport{
 		TLSClientConfig: clientTlsConfig,
-		Proxy: http.ProxyFromEnvironment,
+		Proxy:           http.ProxyFromEnvironment,
 	}
+	this.Actions = NewActions(&goproxy.GoproxyCa)
 	this.Proxy = goproxy.NewProxyHttpServer()
 	this.Proxy.Tr = clientTransport
 	this.Proxy.OnRequest().HandleConnect(onConnect(&this))
 	this.Proxy.OnRequest().Do(onRequest(&this))
 	return &this
+}
+
+// Set the CA certificate presented by the proxy from PEM files
+func (proxy *Inkfish) SetCAFromFiles(caCertFile, caKeyFile string) error {
+	caCert, err := ioutil.ReadFile(caCertFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to read CA cert")
+	}
+	caKey, err := ioutil.ReadFile(caKeyFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to read CA key")
+	}
+	return proxy.SetCA(caCert, caKey)
+}
+
+// Set the CA certificate presented by the proxy from bytes
+func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
+	ca, err := tls.X509KeyPair(caCert, caKey)
+	if err != nil {
+		return errors.Wrap(err, "failed to create CA keypair")
+	}
+	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+		return errors.Wrap(err, "failed to parse CA certificate")
+	}
+	proxy.Actions = NewActions(&ca)
+	return nil
 }
 
 func defaultConnectFilter(host string, port int) bool {
@@ -62,14 +93,14 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		hostFields := strings.Split(host, ":")
 		if len(hostFields) != 2 {
 			ctx.Warnf("bad connect request for '%v'", host)
-			return RejectConnect, host
+			return proxy.Actions.RejectConnect, host
 		}
 		connectHost := hostFields[0]
 		connectPort, err := strconv.Atoi(hostFields[1])
 		if err != nil {
 			ctx.Warnf("bad port in connect request for '%v': '%v'", host, connectPort)
 			ctx.Resp = connectDenied(ctx.Req)
-			return RejectConnect, host
+			return proxy.Actions.RejectConnect, host
 		}
 
 		var allowed bool
@@ -82,7 +113,7 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			ctx.Warnf("client: %v: connect to %v port %v rejected by connect policy",
 				ctx.Req.RemoteAddr, connectHost, connectPort)
 			ctx.Resp = connectDenied(ctx.Req)
-			return RejectConnect, host
+			return proxy.Actions.RejectConnect, host
 		}
 
 		// We allow all CONNECT calls to safe ports (e.g. 443) but perform access control
@@ -100,7 +131,7 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			"host": host,
 		}
 		ctx.UserData = userData
-		return MitmConnect, host
+		return proxy.Actions.MitmConnect, host
 	})
 }
 

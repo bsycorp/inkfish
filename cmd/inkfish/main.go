@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	proxy := inkfish.NewInkfish()
-	err := inkfish.SetGlobalCAFromFiles(*caCert, *caKey)
+	err := proxy.SetCAFromFiles(*caCert, *caKey)
 	if err != nil {
 		log.Fatal("error loading CA config: ", err)
 	}
