@@ -193,11 +193,11 @@ func TestAllowFooNotBar(t *testing.T) {
 
 func TestAllowWithAuth(t *testing.T) {
 	acl1 := MustParseAcl(`
-		from foo
+		from user:foo
 		url ^.*/foo$
 	`)
 	acl2 := MustParseAcl(`
-		from bar
+		from user:bar
 		url ^.*/bar$
 	`)
 	proxy := NewInsecureInkfish()
@@ -252,7 +252,7 @@ func TestAllowWithAuth(t *testing.T) {
 
 func TestAnonymousAccess(t *testing.T) {
 	acl1 := MustParseAcl(`
-		from foo
+		from user:foo
 		url ^.*/foo$
 	`)
 	acl2 := MustParseAcl(`

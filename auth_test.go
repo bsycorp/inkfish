@@ -67,7 +67,7 @@ func TestAuthenticateClientByValidCreds(t *testing.T) {
 	req := templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmZvbw==")
 	res, err := proxy.authenticateClient(req)
-	assert.Equal(t, "foo", res)
+	assert.Equal(t, "user:foo", res)
 	assert.Nil(t, err)
 }
 

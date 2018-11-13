@@ -61,7 +61,7 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 			return badUser, errors.Wrap(err, "could not understand proxy-auth header ")
 		}
 		if proxy.credentialsAreValid(hdrUser, hdrPass) {
-			return hdrUser, nil
+			return "user:" + hdrUser, nil
 		}
 		return badUser, errors.New("authentication failed")
 	}
