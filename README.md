@@ -5,6 +5,21 @@ A forward proxy for machines, with access control lists
 
 https://hub.docker.com/r/bsycorp/inkfish
 
+## About
+
+This is a non-caching forward (aka egress/outbound) proxy, used to implement URL 
+white-listing for applications. It is a fairly thin layer around the excellent 
+[goproxy](https://github.com/elazarl/goproxy/) framework.
+
+Key features:
+
+* An outbound proxy designed for machines
+* Can use cloud metadata to determine the identity of an instance
+* Can use Proxy-Authorization header to identify "non-instance" (e.g. codebuild, serverless) workload
+* Per-instance, per-user URL white-lists
+* TLS MITM by default, white-lists all requests at the URL level
+* Optional MITM bypass, by host
+
 ## Command-line arguments
 
 ```
