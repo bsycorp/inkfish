@@ -102,6 +102,20 @@ func TestAclConfigWithBypass(t *testing.T) {
 	assert.False(t, aclConfig.bypassMitm("baz", "foo.com:443"))
 }
 
+func TestAclConfigWithMissingPortInBypass(t *testing.T) {
+	aclConfig, err := parseAcl([]string{
+		"from foo",
+		"from bar",
+		"url ^http(s)?://google.com/",
+		"url GET,HEAD ^http(s)?://yahoo.com/",
+		"bypass foo.com",
+		"bypass bar.com:443",
+	})
+	assert.Nil(t, aclConfig)
+	assert.NotNil(t, err)
+	assert.Equal(t, "missing port in bypass at line: 5", err.Error())
+}
+
 func TestLoadConfig(t *testing.T) {
 	proxy := NewInkfish()
 	err := proxy.LoadConfigFromDirectory("testdata/unit_test_config")

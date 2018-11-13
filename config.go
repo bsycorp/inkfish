@@ -149,6 +149,11 @@ func parseAcl(lines []string) (*Acl, error) {
 			}
 			aclConfig.Entries = append(aclConfig.Entries, *newEntry)
 		} else if words[0] == "bypass" {
+			for _, hostAndPort := range words[1:] {
+				if strings.IndexRune(hostAndPort, ':') == -1 {
+					return nil, errors.Errorf("missing port in bypass at line: %v", line_no+1)
+				}
+			}
 			aclConfig.MitmBypass = append(aclConfig.MitmBypass, words[1:]...)
 		} else {
 			return nil, errors.Errorf("unknown directive at line: %v", line_no+1)

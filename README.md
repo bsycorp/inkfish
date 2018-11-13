@@ -69,6 +69,10 @@ to match things like `https://foo.com.au/evilthing` as well as the intended doma
 Similarly, it is usually an error to forget to escape dots with backslashes as this can also cause 
 unintended matches.
 
+A more complex acl example might look like:
+
+* `acl HEAD,GET,POST ^http(s)://api\.foo\.com/v2/
+
 The `bypass` directive is used to disable TLS MITM for specific hosts. The "host:port" portion of the
 request is matched directly against the client's CONNECT request. For example:
 
