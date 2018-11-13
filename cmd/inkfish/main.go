@@ -30,9 +30,9 @@ func main() {
 	}
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
+		log.Println("using AWS metadata provider")
 		sess, err := session.NewSession()
 		if err != nil {
-			// SDK failed to load creds, most likely
 			log.Fatal("failed to create aws session for metadata update: ", err)
 		}
 		go func() {
@@ -42,6 +42,7 @@ func main() {
 			}
 		}()
 	}
+	proxy.MetadataProvider = metadataCache
 	proxy.Proxy.Verbose = *verbose
 	log.Fatal(http.ListenAndServe(*addr, proxy.Proxy))
 }

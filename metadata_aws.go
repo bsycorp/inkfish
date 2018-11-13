@@ -14,7 +14,7 @@ var arnToIP = map[string]string{}
 func UpdateMetadataFromAWS(sess *session.Session, cache *MetadataCache) {
 	ipToTag, err := MakeIPToTagMap(sess,"ProxyUser")
 	if err != nil {
-		log.Println("failed to read metadata: ", err) // TODO: logging
+		log.Println("failed to read aws metadata: ", err)
 	} else {
 		cache.Replace(ipToTag)
 	}
@@ -38,6 +38,7 @@ func MakeIPToTagMap(sess *session.Session, targetTag string) (map[string]string,
 		}
 		// Update our metadata map
 		if instanceIP, ok := arnToIP[instanceId]; ok {
+			log.Printf("Found new metadata tag for IP: %v: %v\n", instanceIP, instanceTagValue)
 			ipToTag[instanceIP] = instanceTagValue
 		}
 	}
