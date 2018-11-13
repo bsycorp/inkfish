@@ -32,7 +32,6 @@ type Inkfish struct {
 	Actions          *Actions
 }
 
-
 func NewInkfish() *Inkfish {
 	var this Inkfish
 	clientTlsConfig := &tls.Config{InsecureSkipVerify: ClientInsecureSkipVerify}
@@ -95,17 +94,28 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 	return goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		hostFields := strings.Split(host, ":")
 		if len(hostFields) != 2 {
-			ctx.Warnf("bad connect request for '%v'", host)
+			proxy.logConnect(ctx, ConnectLogEntry{
+				RemoteAddr:    ctx.Req.RemoteAddr,
+				User:          "UNKNOWN",
+				ConnectTarget: host,
+				Result:        "REJECT",
+				Reason:        "bad connect request",
+			})
 			return proxy.Actions.RejectConnect, host
 		}
 		connectHost := hostFields[0]
 		connectPort, err := strconv.Atoi(hostFields[1])
 		if err != nil {
-			ctx.Warnf("bad port in connect request for '%v': '%v'", host, connectPort)
+			proxy.logConnect(ctx, ConnectLogEntry{
+				RemoteAddr:    ctx.Req.RemoteAddr,
+				User:          "UNKNOWN",
+				ConnectTarget: host,
+				Result:        "REJECT",
+				Reason:        "bad port number",
+			})
 			ctx.Resp = connectDenied(ctx.Req)
 			return proxy.Actions.RejectConnect, host
 		}
-
 		var allowed bool
 		if proxy.ConnectFilter != nil {
 			allowed = proxy.ConnectFilter(connectHost, connectPort)
@@ -113,8 +123,13 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 			allowed = defaultConnectFilter(connectHost, connectPort)
 		}
 		if !allowed {
-			ctx.Warnf("client: %v: connect to %v port %v rejected by connect policy",
-				ctx.Req.RemoteAddr, connectHost, connectPort)
+			proxy.logConnect(ctx, ConnectLogEntry{
+				RemoteAddr:    ctx.Req.RemoteAddr,
+				User:          "UNKNOWN",
+				ConnectTarget: host,
+				Result:        "REJECT",
+				Reason:        "denied by connect filter",
+			})
 			ctx.Resp = connectDenied(ctx.Req)
 			return proxy.Actions.RejectConnect, host
 		}
@@ -136,10 +151,21 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		ctx.UserData = userData
 
 		// Search for an MITM bypass directive
-
 		if proxy.bypassMitm(user, host) {
+			proxy.logConnect(ctx, ConnectLogEntry{
+				RemoteAddr:    ctx.Req.RemoteAddr,
+				User:          user,
+				ConnectTarget: host,
+				Result:        "BYPASS",
+			})
 			return proxy.Actions.OkConnect, host
 		}
+		proxy.logConnect(ctx, ConnectLogEntry{
+			RemoteAddr:    ctx.Req.RemoteAddr,
+			User:          user,
+			ConnectTarget: host,
+			Result:        "MITM",
+		})
 		return proxy.Actions.MitmConnect, host
 	})
 }
@@ -167,6 +193,14 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 			}
 		} else {
 			// We don't support ftp://, gopher:// etc.
+			proxy.logRequest(ctx, RequestLogEntry{
+				RemoteAddr: ctx.Req.RemoteAddr,
+				User:       "UNKNOWN",
+				Method:     req.Method,
+				Url:        req.URL,
+				Result:     "DENIED",
+				Reason:     "unsupported scheme",
+			})
 			return req, deniedResponse
 		}
 		if user == "" {
@@ -181,8 +215,25 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 			req.URL.Host = req.Host
 		}
 		if proxy.permitsRequest(user, req.Method, req.URL.String()) {
+			proxy.logRequest(ctx, RequestLogEntry{
+				RemoteAddr: ctx.Req.RemoteAddr,
+				User:       user,
+				Method:     req.Method,
+				Url:        req.URL,
+				Result:     "ALLOWED",
+			})
 			return req, nil // Allow the request
 		}
+
+		// Fall through, failed
+		proxy.logRequest(ctx, RequestLogEntry{
+			RemoteAddr: ctx.Req.RemoteAddr,
+			User:       user,
+			Method:     req.Method,
+			Url:        req.URL,
+			Result:     "DENY",
+			Reason:     "denied by policy",
+		})
 		return req, deniedResponse
 	})
 }
