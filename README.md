@@ -58,18 +58,18 @@ The <user> may be specified as:
 * `ANONYMOUS` - Identifies a user or system which does not supply a proxy-authorization header and 
                does not have any identifying metadata tags.
 
-The `acl` directive is used to permit requests according to a URL white-list. You may optionally specify
-one or more methods in the ACL, causing only requests made with one of the listed methods to match the 
-ACL. Typical "whole-host" acls look like:
+The `acl` directive is used to permit requests according to a regular expression matching a URL.. You 
+may optionally specify one or more methods in the ACL, causing only requests made with one of the listed 
+methods to match the ACL. Typical "whole-host" acls look like:
 
 * `acl ^http(s)?://foo\.com/`
 
-Note that it is generally an error to forget the trailing `/`, as this will cause the regular expression
+WARNING: it is generally an error to forget the trailing `/`, as this would cause the regular expression
 to match things like `https://foo.com.au/evilthing` as well as the intended domain `https://foo.com/`. 
 Similarly, it is usually an error to forget to escape dots with backslashes as this can also cause 
 unintended matches.
 
-The `bypass` directive used to disable TLS MITM for specific hosts. The "host:port" portion of the
+The `bypass` directive is used to disable TLS MITM for specific hosts. The "host:port" portion of the
 request is matched directly against the client's CONNECT request. For example:
 
 * `bypass my-super-bucket.ap-southeast-2.amazonaws.com:443`
