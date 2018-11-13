@@ -46,15 +46,36 @@ from <user> [user2 user3...]
 from ...
 acl [METHOD,METHOD2] <url-regex>
 acl ...
+bypass <host:port>
+bypass ...
 ```
 
-Blank lines and comments (lines starting with `#`) are ignored. The "from" lines gate entry into the ACL.
+Blank lines and comments (lines starting with `#`) are ignored. The `from` lines gate entry into the ACL.
 The <user> may be specified as:
 
 * `user:foo` - Identifies a client who will supply a proxy-authorization header with a username of `foo`.
 * `tag:foo` - Identifies a client whose cloud metadata (e.g. instance ProxyUser tag in AWS) is `foo`.
 * `ANONYMOUS` - Identifies a user or system which does not supply a proxy-authorization header and 
                does not have any identifying metadata tags.
+
+The `acl` directive is used to permit requests according to a URL white-list. You may optionally specify
+one or more methods in the ACL, causing only requests made with one of the listed methods to match the 
+ACL. Typical "whole-host" acls look like:
+
+* `acl ^http(s)?://foo\.com/`
+
+Note that it is generally an error to forget the trailing `/`, as this will cause the regular expression
+to match things like `https://foo.com.au/evilthing` as well as the intended domain `https://foo.com/`. 
+Similarly, it is usually an error to forget to escape dots with backslashes as this can also cause 
+unintended matches.
+
+The `bypass` directive used to disable TLS MITM for specific hosts. The "host:port" portion of the
+request is matched directly against the client's CONNECT request. For example:
+
+* `bypass my-super-bucket.ap-southeast-2.amazonaws.com:443`
+
+You must specify the port in the bypass target. The bypass target is not a regular expression and 
+must match exactly.
 
 ## Metadata lookup
 
