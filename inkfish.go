@@ -28,6 +28,7 @@ type Inkfish struct {
 	ConnectFilter    func(string, int) bool
 	MetadataProvider MetadataProvider
 	Proxy            *goproxy.ProxyHttpServer
+	CertSigner       *CertSigner
 	Actions          *Actions
 }
 
@@ -39,7 +40,8 @@ func NewInkfish() *Inkfish {
 		TLSClientConfig: clientTlsConfig,
 		Proxy:           http.ProxyFromEnvironment,
 	}
-	this.Actions = NewActions(&goproxy.GoproxyCa)
+	this.CertSigner = NewCertSigner(&goproxy.GoproxyCa)
+	this.Actions = this.CertSigner.GetActions()
 	this.Proxy = goproxy.NewProxyHttpServer()
 	this.Proxy.Tr = clientTransport
 	this.Proxy.OnRequest().HandleConnect(onConnect(&this))
@@ -69,7 +71,8 @@ func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
 	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return errors.Wrap(err, "failed to parse CA certificate")
 	}
-	proxy.Actions = NewActions(&ca)
+	proxy.CertSigner = NewCertSigner(&ca)
+	proxy.Actions = proxy.CertSigner.GetActions()
 	return nil
 }
 
