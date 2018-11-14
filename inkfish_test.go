@@ -67,11 +67,19 @@ func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
 }
 
 // Make an HTTP client for the server, optionally with creds
-func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
+func (it *InkfishTestServer) Client(userInfo *url.Userinfo, extra ...string) (*http.Client) {
 	proxyUrl, _ := url.Parse(it.Server.URL)
 	proxyUrl.User = userInfo
-	acceptAllCerts := &tls.Config{InsecureSkipVerify: true} // TODO: verify against own CA?
-	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
+	acceptAllCerts := &tls.Config{InsecureSkipVerify: true}
+	disableKeepAlives := false
+	if listContainsString(extra, "DisableKeepAlives") {
+		disableKeepAlives = true
+	}
+	tr := &http.Transport{
+		TLSClientConfig: acceptAllCerts,
+		Proxy: http.ProxyURL(proxyUrl),
+		DisableKeepAlives: disableKeepAlives,
+	}
 	return &http.Client{Transport: tr}
 }
 
@@ -319,3 +327,4 @@ func TestMitmBypassByUser(t *testing.T) {
 func TestMultipleUserPasswords(t *testing.T) {
 	// TODO: test that the same user with multiple passwords set, works
 }
+
