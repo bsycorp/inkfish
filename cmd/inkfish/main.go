@@ -35,6 +35,8 @@ func main() {
 		if err != nil {
 			log.Fatal("failed to create aws session for metadata update: ", err)
 		}
+		// Do an inital metadata update before listening
+		inkfish.UpdateMetadataFromAWS(sess, metadataCache)
 		go func() {
 			for {
 				inkfish.UpdateMetadataFromAWS(sess, metadataCache)

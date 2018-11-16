@@ -143,12 +143,14 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 		if err != nil {
 			ctx.Warnf("client: %v: authentication error during connect: %v", ctx.Req.RemoteAddr, err)
 		}
-		// Stash the authenticated username against the proxy context
-		userData := map[string]string{
-			"user": user,
-			"host": host,
+		// Stash the authenticated username against the proxy context iff the user did proxy-auth
+		if strings.HasPrefix(user, "user:") {
+			userData := map[string]string{
+				"user": user,
+				"host": host,
+			}
+			ctx.UserData = userData
 		}
-		ctx.UserData = userData
 
 		// Search for an MITM bypass directive
 		if proxy.bypassMitm(user, host) {
@@ -172,26 +174,12 @@ func onConnect(proxy *Inkfish) goproxy.HttpsHandler {
 
 func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		user := ""
-		deniedResponse := goproxy.NewResponse(req, goproxy.ContentTypeText,
-			http.StatusForbidden, AccessDenied)
-
-		if req.URL.Scheme == "https" {
-			// If this is an HTTPS request, we expect to use creds saved during
-			// the proxy CONNECT phase.
-			userData, ok := ctx.UserData.(map[string]string)
-			if ok {
-				user = userData["user"]
-			}
-		} else if req.URL.Scheme == "http" {
-			// This is not a tunneled request so we invoke our auth logic for
-			// the specific request.
-			var err error
-			user, err = proxy.authenticateClient(req)
-			if err != nil {
-				ctx.Warnf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
-			}
-		} else {
+		deniedResponse := goproxy.NewResponse(req,
+			goproxy.ContentTypeText,
+			http.StatusForbidden,
+			AccessDenied,
+		)
+		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 			// We don't support ftp://, gopher:// etc.
 			proxy.logRequest(ctx, RequestLogEntry{
 				RemoteAddr: ctx.Req.RemoteAddr,
@@ -203,9 +191,24 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 			})
 			return req, deniedResponse
 		}
-		if user == "" {
-			user = "ANONYMOUS"
+		var user string
+		if req.URL.Scheme == "https" {
+			// If this is an HTTPS request, we try to get cached creds from the CONNECT phase.
+			userData, ok := ctx.UserData.(map[string]string)
+			if ok {
+				user = userData["user"]
+			}
 		}
+		if req.URL.Scheme == "http" || user == "" {
+			// This is a non-tunneled request or for whatever reason, we don't have cached creds.
+			var err error
+			user, err = proxy.authenticateClient(req)
+			if err != nil {
+				ctx.Warnf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
+				// We don't bail out, user will come back as INVALID and get rejected by ACL
+			}
+		}
+
 		// One of the quirks of goproxy is that request URLs will come through looking
 		// like "https://twitter.com:443/" if they came via MiTM. We fix this up a bit
 		// to make sure that our URL filtering is not going to see extraneous ports in
