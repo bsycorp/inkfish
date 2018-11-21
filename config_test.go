@@ -102,6 +102,22 @@ func TestAclConfigWithBypass(t *testing.T) {
 	assert.False(t, aclConfig.bypassMitm("baz", "foo.com:443"))
 }
 
+func TestAclConfigWithRegexpBypass(t *testing.T) {
+	aclConfig, err := parseAcl([]string{
+		"from foo",
+		`bypass ^(.*\.)?foo\.com:443$`,
+		`bypass ^foo\.com:443$`,
+	})
+	assert.NotNil(t, aclConfig)
+	assert.Nil(t, err)
+
+	assert.True(t, aclConfig.bypassMitm("foo", "hosta.foo.com:443"))
+	assert.True(t, aclConfig.bypassMitm("foo", "hostb.foo.com:443"))
+	assert.True(t, aclConfig.bypassMitm("foo", "foo.com:443"))
+	assert.False(t, aclConfig.bypassMitm("foo", "foofoo.com:443"))
+	assert.False(t, aclConfig.bypassMitm("foo", "a.bar.com:443"))
+}
+
 func TestAclConfigWithMissingPortInBypass(t *testing.T) {
 	aclConfig, err := parseAcl([]string{
 		"from foo",

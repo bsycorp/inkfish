@@ -295,8 +295,8 @@ func TestMitmBypassByUser(t *testing.T) {
 	// Gotta do ACLs last so we know the right server port.
 	acl1 := MustParseAcl(fmt.Sprintf(`
 		from user:foo
-		bypass %v
-	`, u.Host))
+		bypass ^%v$
+	`, strings.Replace(u.Host, ".", "\\.", -1)))
 	acl2 := MustParseAcl(`
 		from user:bar
 		url ^.*/bar$

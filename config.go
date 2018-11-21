@@ -17,7 +17,7 @@ const PasswordHashLen = 64 // Length of SHA-256 output, as hex chars
 type Acl struct {
 	From       []string
 	Entries    []AclEntry
-	MitmBypass []string
+	MitmBypass []*regexp.Regexp
 }
 
 type AclEntry struct {
@@ -100,7 +100,12 @@ func (c *Acl) bypassMitm(from, hostAndPort string) bool {
 	if !listContainsString(c.From, from) {
 		return false
 	}
-	return listContainsString(c.MitmBypass, hostAndPort)
+	for _, e := range c.MitmBypass {
+		if e.MatchString(hostAndPort) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseAclEntry(words []string) (*AclEntry, error) {
@@ -154,7 +159,13 @@ func parseAcl(lines []string) (*Acl, error) {
 					return nil, errors.Errorf("missing port in bypass at line: %v", line_no+1)
 				}
 			}
-			aclConfig.MitmBypass = append(aclConfig.MitmBypass, words[1:]...)
+			for _, hostAndPortRe := range words[1:] {
+				re, err := regexp.Compile(hostAndPortRe)
+				if err != nil {
+					return nil, errors.Errorf("failed to parse bypass at line: %v", line_no+1)
+				}
+				aclConfig.MitmBypass = append(aclConfig.MitmBypass, re)
+			}
 		} else {
 			return nil, errors.Errorf("unknown directive at line: %v", line_no+1)
 		}
