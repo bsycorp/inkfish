@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"github.com/elazarl/goproxy"
 	"github.com/pkg/errors"
 	"io/ioutil"
