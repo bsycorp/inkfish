@@ -36,10 +36,23 @@ func (h ConstantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(h))
 }
 
+type HeaderHandler struct{}
+
+func (HeaderHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("X-Custom-Header", "Expected-Value")
+	for k := range req.Header {
+		vals := req.Header[k]
+		for i := range vals {
+			w.Header().Set("X-Reflect-" + k, vals[i])
+		}
+	}
+}
+
 func init() {
 	http.DefaultServeMux.Handle("/foo", ConstantHandler("foo"))
 	http.DefaultServeMux.Handle("/bar", ConstantHandler("bar"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
+	http.DefaultServeMux.Handle("/header", HeaderHandler{})
 }
 
 // -------------------
@@ -84,8 +97,8 @@ func get(client *http.Client, url string) (int, []byte, error) {
 	if err != nil {
 		return -1, nil, err
 	}
-	body, err := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return resp.StatusCode, nil, err
 	}
@@ -318,4 +331,37 @@ func TestMitmBypassByUser(t *testing.T) {
 
 func TestMultipleUserPasswords(t *testing.T) {
 	// TODO: test that the same user with multiple passwords set, works
+}
+
+func TestCustomHeaders(t *testing.T) {
+	// Verify that custom server headers make it through to the client.
+	// Also check that Accept-Encoding isn't being messed with.
+	proxy := NewInsecureInkfish()
+	proxy.Passwd = passwdFooBarBaz
+	s := NewInkfishTest(proxy)
+	defer s.Close()
+	acl := MustParseAcl(`
+		from user:foo
+		url .*
+	`)
+	proxy.Acls = []Acl{acl}
+	client := s.Client(url.UserPassword("foo", "foo"))
+
+	headerTestUrl := srv_https.URL+"/header"
+	req, err := http.NewRequest("GET", headerTestUrl, nil)
+	assert.Nil(t, err)
+
+	req.Header.Set("Accept-Encoding", "MagicValue")
+	req.Header.Set("Content-Type", "SomethingWeird")
+
+	resp, err := client.Do(req)
+	assert.Nil(t, err)
+	defer resp.Body.Close()
+	_, err = ioutil.ReadAll(resp.Body)
+	assert.Nil(t, err)
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Expected-Value", resp.Header.Get("X-Custom-Header"))
+	assert.Equal(t, "SomethingWeird", resp.Header.Get("X-Reflect-Content-Type"))
+	assert.Equal(t, "MagicValue", resp.Header.Get("X-Reflect-Accept-Encoding"))
 }

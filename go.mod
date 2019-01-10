@@ -8,3 +8,5 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.2.2
 )
+
+replace github.com/elazarl/goproxy => github.com/bsycorp/goproxy v0.0.0-20190110002956-fe201aa941ac

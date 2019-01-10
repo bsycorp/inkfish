@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"github.com/elazarl/goproxy"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -38,10 +39,12 @@ func NewInkfish() *Inkfish {
 	clientTransport := &http.Transport{
 		TLSClientConfig: clientTlsConfig,
 		Proxy:           http.ProxyFromEnvironment,
+		DisableCompression: true,
 	}
 	this.CertSigner = NewCertSigner(&goproxy.GoproxyCa)
 	this.Actions = this.CertSigner.GetActions()
 	this.Proxy = goproxy.NewProxyHttpServer()
+	this.Proxy.KeepAcceptEncoding = true
 	this.Proxy.Tr = clientTransport
 	this.Proxy.OnRequest().HandleConnect(onConnect(&this))
 	this.Proxy.OnRequest().Do(onRequest(&this))
@@ -214,7 +217,6 @@ func onRequest(proxy *Inkfish) goproxy.ReqHandler {
 		// to make sure that our URL filtering is not going to see extraneous ports in
 		// requests when regex matching.
 		if req.URL.Scheme == "https" && req.Host != req.URL.Host {
-			// TODO: check for "domain fronting"
 			req.URL.Host = req.Host
 		}
 		if proxy.permitsRequest(user, req.Method, req.URL.String()) {
