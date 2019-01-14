@@ -9,4 +9,4 @@ require (
 	github.com/stretchr/testify v1.2.2
 )
 
-replace github.com/elazarl/goproxy => github.com/bsycorp/goproxy v0.0.0-20190114013759-0cd64d37bc8e
+replace github.com/elazarl/goproxy => github.com/bsycorp/goproxy v0.0.0-20190114020951-d722f1dbe962
