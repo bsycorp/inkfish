@@ -133,7 +133,7 @@ func TestAclConfigWithMissingPortInBypass(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	err := proxy.LoadConfigFromDirectory("testdata/unit_test_config")
 	assert.NotNil(t, proxy.Acls)
 	assert.Nil(t, err)

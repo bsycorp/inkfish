@@ -51,7 +51,8 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 	// Check for client-supplied creds first
 	if _, hasAuthHdr := req.Header[ProxyAuthorizationHeader]; hasAuthHdr {
 		authHdr := req.Header[ProxyAuthorizationHeader]
-		req.Header.Del(ProxyAuthorizationHeader)  // Never forward to an origin server
+		// TODO: delete this somewhere else
+		// req.Header.Del(ProxyAuthorizationHeader)  // Never forward to an origin server
 		if len(authHdr) != 1 {
 			return badUser, errors.New("denying request due to multiple proxy-auth headers")
 		}

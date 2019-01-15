@@ -1,15 +1,16 @@
 package inkfish
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/elazarl/goproxy"
+	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
+	//"strconv"
+	//"strings"
 )
 
 const AccessDenied = `
@@ -25,30 +26,36 @@ var ClientInsecureSkipVerify = false
 type Inkfish struct {
 	Acls             []Acl
 	Passwd           []UserEntry
-	ConnectFilter    func(string, int) bool
 	MetadataProvider MetadataProvider
-	Proxy            *goproxy.ProxyHttpServer
+	ConnectFilter    func(host string, port int) bool
+	Proxy            *Proxy
 	CertSigner       *CertSigner
-	Actions          *Actions
 }
 
-func NewInkfish() *Inkfish {
-	proxy := &Inkfish{}
-	clientTlsConfig := &tls.Config{
-		InsecureSkipVerify: ClientInsecureSkipVerify,
+func NewInkfish(signer *CertSigner) *Inkfish {
+	proxy := &Inkfish{
+		Proxy: &Proxy{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			TLSServerConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+			CertSigner: signer,
+		},
 	}
-	clientTransport := &http.Transport{
-		TLSClientConfig: clientTlsConfig,
-		Proxy:           http.ProxyFromEnvironment,
-		DisableCompression: true,
+	proxy.Proxy.Wrap = func(connectReq *http.Request, scheme string, upstream http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if allowed := proxy.RequestFilter(connectReq, scheme, w, r); allowed {
+				// Pass through
+				//log.Println("ACCEPTED")
+				upstream.ServeHTTP(w, r)
+			} else {
+				// We dropped it...
+			}
+		})
 	}
-	proxy.CertSigner = NewCertSigner(&goproxy.GoproxyCa)
-	proxy.Actions = proxy.CertSigner.GetActions()
-	proxy.Proxy = goproxy.NewProxyHttpServer()
-	proxy.Proxy.KeepAcceptEncoding = true
-	proxy.Proxy.Tr = clientTransport
-	proxy.Proxy.OnRequest().HandleConnect(proxy)
-	proxy.Proxy.OnRequest().Do(proxy)
+
 	return proxy
 }
 
@@ -75,7 +82,6 @@ func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
 		return errors.Wrap(err, "failed to parse CA certificate")
 	}
 	proxy.CertSigner = NewCertSigner(&ca)
-	proxy.Actions = proxy.CertSigner.GetActions()
 	return nil
 }
 
@@ -83,42 +89,41 @@ func defaultConnectFilter(host string, port int) bool {
 	return port == 443
 }
 
-func connectDenied(req *http.Request) *http.Response {
-	return &http.Response{
-		StatusCode:    403,
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Request:       req,
-		Body:          ioutil.NopCloser(bytes.NewBuffer([]byte(AccessDenied))),
-		ContentLength: int64(len(AccessDenied)),
-	}
+func sendAccessDenied(w http.ResponseWriter) {
+	w.WriteHeader(403)
+	//w.Header().Add("Connection", "close")
+	w.Write([]byte(AccessDenied))
 }
 
-func (proxy *Inkfish) HandleConnect(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+func (proxy *Inkfish) FilterConnect(w http.ResponseWriter, r *http.Request) (action ConnectAction) {
+	// TODO: what if host doesn't correspond with r.URI or whatever?
+	host := r.Host
+
 	// Handle a CONNECT request
 	hostFields := strings.Split(host, ":")
 	if len(hostFields) != 2 {
-		proxy.logConnect(ctx, ConnectLogEntry{
-			RemoteAddr:    ctx.Req.RemoteAddr,
+		proxy.logConnect(ConnectLogEntry{
+			RemoteAddr:    r.RemoteAddr,
 			User:          "UNKNOWN",
 			ConnectTarget: host,
 			Result:        "DENY",
 			Reason:        "bad connect request",
 		})
-		return proxy.Actions.RejectConnect, host
+		sendAccessDenied(w)
+		return ConnectDeny
 	}
 	connectHost := hostFields[0]
 	connectPort, err := strconv.Atoi(hostFields[1])
 	if err != nil {
-		proxy.logConnect(ctx, ConnectLogEntry{
-			RemoteAddr:    ctx.Req.RemoteAddr,
+		proxy.logConnect(ConnectLogEntry{
+			RemoteAddr:    r.RemoteAddr,
 			User:          "UNKNOWN",
 			ConnectTarget: host,
 			Result:        "DENY",
 			Reason:        "bad port number",
 		})
-		ctx.Resp = connectDenied(ctx.Req)
-		return proxy.Actions.RejectConnect, host
+		sendAccessDenied(w)
+		return ConnectDeny
 	}
 	var allowed bool
 	if proxy.ConnectFilter != nil {
@@ -127,15 +132,15 @@ func (proxy *Inkfish) HandleConnect(host string, ctx *goproxy.ProxyCtx) (*goprox
 		allowed = defaultConnectFilter(connectHost, connectPort)
 	}
 	if !allowed {
-		proxy.logConnect(ctx, ConnectLogEntry{
-			RemoteAddr:    ctx.Req.RemoteAddr,
+		proxy.logConnect(ConnectLogEntry{
+			RemoteAddr:    r.RemoteAddr,
 			User:          "UNKNOWN",
 			ConnectTarget: host,
 			Result:        "DENY",
 			Reason:        "denied by connect filter",
 		})
-		ctx.Resp = connectDenied(ctx.Req)
-		return proxy.Actions.RejectConnect, host
+		sendAccessDenied(w)
+		return ConnectDeny
 	}
 
 	// We allow all CONNECT calls to safe ports (e.g. 443) but perform access control
@@ -143,105 +148,86 @@ func (proxy *Inkfish) HandleConnect(host string, ctx *goproxy.ProxyCtx) (*goprox
 	// we need to read that out now as it will not be sent on "tunneled" HTTP requests.
 
 	var user string
-	user, err = proxy.authenticateClient(ctx.Req)
+	user, err = proxy.authenticateClient(r)
 	if err != nil || user == badUser {
-		ctx.Warnf("client: %v: authentication error during connect: %v", ctx.Req.RemoteAddr, err)
+		proxy.ctxLogf("client: %v: authentication error during connect: %v", r.RemoteAddr, err)
 		// We don't bail early here, we set badUser and let ACLs handle it all later. Why? Well, when you
 		// fail during CONNECT / tunnel establishment, clients usually don't handle it well. Clients will
 		// get much nicer errors if we reject tunneled requests instead.
 	}
 
-	// Stash the authenticated username against the proxy context iff the user did proxy-auth
-	if strings.HasPrefix(user, "user:") {
-		userData := map[string]string{
-			"user": user,
-			"host": host,
-		}
-		ctx.UserData = userData
-	}
-
 	// Search for an MITM bypass directive
 	if proxy.bypassMitm(user, host) {
-		proxy.logConnect(ctx, ConnectLogEntry{
-			RemoteAddr:    ctx.Req.RemoteAddr,
+		proxy.logConnect(ConnectLogEntry{
+			RemoteAddr:    r.RemoteAddr,
 			User:          user,
 			ConnectTarget: host,
 			Result:        "BYPASS",
 		})
-		return proxy.Actions.OkConnect, host
+		return ConnectBypass
 	}
-	proxy.logConnect(ctx, ConnectLogEntry{
-		RemoteAddr:    ctx.Req.RemoteAddr,
+	proxy.logConnect(ConnectLogEntry{
+		RemoteAddr:    r.RemoteAddr,
 		User:          user,
 		ConnectTarget: host,
 		Result:        "MITM",
 	})
-	return proxy.Actions.MitmConnect, host
+	return ConnectMitm
 }
 
-func (proxy *Inkfish) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-	// Handle an HTTP request (or an HTTPS request inside a CONNECT tunnel)
-	deniedResponse := goproxy.NewResponse(req,
-		goproxy.ContentTypeText,
-		http.StatusForbidden,
-		AccessDenied,
-	)
-	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-		// We don't support ftp://, gopher:// etc.
-		proxy.logRequest(ctx, RequestLogEntry{
-			RemoteAddr: ctx.Req.RemoteAddr,
-			User:       "UNKNOWN",
-			Method:     req.Method,
-			Url:        req.URL,
-			Result:     "DENY",
-			Reason:     "unsupported scheme",
-		})
-		return req, deniedResponse
-	}
+func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w http.ResponseWriter, req *http.Request) bool {
+	//fmt.Println("--------")
+	//fmt.Println(req)
 	var user string
-	if req.URL.Scheme == "https" {
-		// If this is an HTTPS request, we try to get cached creds from the CONNECT phase.
-		userData, ok := ctx.UserData.(map[string]string)
-		if ok {
-			user = userData["user"]
+	fmt.Println("REQUEST SCHEME: " + scheme)
+	fmt.Println("connect request: ", connectReq)
+	if scheme == "https" {
+		// Since this is an http request, we authenticate from the connect request
+		var err error
+		//fmt.Println(connectReq)
+		user, err = proxy.authenticateClient(connectReq)
+		fmt.Println("Authenticated via creds on CONNECT as: " + user)
+		if err != nil || user == badUser {
+			proxy.ctxLogf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
+			fmt.Printf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
+			// Don't bail out, user will come back as INVALID and get rejected by ACL
 		}
 	}
-	if req.URL.Scheme == "http" || user == "" {
+	if scheme == "http" {
 		// This is a non-tunneled request or for whatever reason, we don't have cached creds.
 		var err error
 		user, err = proxy.authenticateClient(req)
+		//fmt.Println("Authenticated as: " + user)
 		if err != nil || user == badUser {
-			ctx.Warnf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
+			proxy.ctxLogf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
 			// Don't bail out, user will come back as INVALID and get rejected by ACL
 		}
 	}
 
-	// One of the quirks of goproxy is that request URLs will come through looking
-	// like "https://twitter.com:443/" if they came via MiTM. We fix this up a bit
-	// to make sure that our URL filtering is not going to see extraneous ports in
-	// requests when regex matching.
-	if req.URL.Scheme == "https" && req.Host != req.URL.Host {
-		req.URL.Host = req.Host
-	}
-	if proxy.permitsRequest(user, req.Method, req.URL.String()) {
-		proxy.logRequest(ctx, RequestLogEntry{
-			RemoteAddr: ctx.Req.RemoteAddr,
+	aclUrl := *req.URL
+	aclUrl.Scheme = scheme
+	aclUrl.Host = req.Host
+
+	if proxy.permitsRequest(user, req.Method, aclUrl.String()) {
+		proxy.logRequest(RequestLogEntry{
+			RemoteAddr: req.RemoteAddr,
 			User:       user,
 			Method:     req.Method,
-			Url:        req.URL,
+			Url:        &aclUrl,
 			Result:     "ALLOW",
 		})
-		return req, nil // Allow the request
+		return true
 	}
 
 	// Fall through, failed
-	proxy.logRequest(ctx, RequestLogEntry{
-		RemoteAddr: ctx.Req.RemoteAddr,
+	proxy.logRequest(RequestLogEntry{
+		RemoteAddr: req.RemoteAddr,
 		User:       user,
 		Method:     req.Method,
-		Url:        req.URL,
+		Url:        &aclUrl,
 		Result:     "DENY",
 		Reason:     "denied by policy",
 	})
-	return req, deniedResponse
+	sendAccessDenied(w)
+	return false
 }

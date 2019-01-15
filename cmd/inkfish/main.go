@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
+	// verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	configDir := flag.String("config", ".", "path to configuration files")
 	caCert := flag.String("cacert", "ca.pem", "path to CA cert file")
 	caKey := flag.String("cakey", "ca.key.pem", "path to CA key file")
@@ -19,7 +19,7 @@ func main() {
 
 	flag.Parse()
 
-	proxy := inkfish.NewInkfish()
+	proxy := inkfish.NewInkfish(inkfish.NewCertSigner(&inkfish.StubCA))
 	err := proxy.SetCAFromFiles(*caCert, *caKey)
 	if err != nil {
 		log.Fatal("error loading CA config: ", err)
@@ -45,6 +45,5 @@ func main() {
 		}()
 	}
 	proxy.MetadataProvider = metadataCache
-	proxy.Proxy.Verbose = *verbose
 	log.Fatal(http.ListenAndServe(*addr, proxy.Proxy))
 }

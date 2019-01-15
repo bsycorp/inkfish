@@ -22,7 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"github.com/elazarl/goproxy"
+	"log"
 	"math/big"
 	"net"
 	"sort"
@@ -32,13 +32,6 @@ import (
 )
 
 const signerVersion = ":inkfish1"
-
-type Actions struct {
-	OkConnect       *goproxy.ConnectAction
-	MitmConnect     *goproxy.ConnectAction
-	HTTPMitmConnect *goproxy.ConnectAction
-	RejectConnect   *goproxy.ConnectAction
-}
 
 type CertSigner struct {
 	CA *tls.Certificate
@@ -58,15 +51,6 @@ func NewCertSigner(ca *tls.Certificate) (*CertSigner) {
 	return &signer
 }
 
-func (certSigner *CertSigner) GetActions() (*Actions) {
-	var actions Actions
-	actions.OkConnect = &goproxy.ConnectAction{Action: goproxy.ConnectAccept, TLSConfig: certSigner.TLSConfig()}
-	actions.MitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectMitm, TLSConfig: certSigner.TLSConfig()}
-	actions.HTTPMitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectHTTPMitm, TLSConfig: certSigner.TLSConfig()}
-	actions.RejectConnect = &goproxy.ConnectAction{Action: goproxy.ConnectReject, TLSConfig: certSigner.TLSConfig()}
-	return &actions
-}
-
 func stripPort(s string) string {
 	ix := strings.IndexRune(s, ':')
 	if ix == -1 {
@@ -75,14 +59,14 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
-func (certSigner *CertSigner) TLSConfig() func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error) {
-	return func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error) {
+func (certSigner *CertSigner) TLSConfig() func(host string) (*tls.Config, error) {
+	return func(host string) (*tls.Config, error) {
 		var config tls.Config
 		config = *certSigner.TlsConfig
-		ctx.Logf("signing for %s", stripPort(host))
+		log.Printf("signing for %s", stripPort(host))
 		cert, err := certSigner.signHost([]string{stripPort(host)})
 		if err != nil {
-			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+			log.Printf("Cannot sign host certificate with provided CA: %s", err)
 			return nil, err
 		}
 		config.Certificates = append(config.Certificates, cert)
