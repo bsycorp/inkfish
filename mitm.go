@@ -7,7 +7,6 @@ package inkfish
 import (
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
