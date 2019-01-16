@@ -45,7 +45,7 @@ type Proxy struct {
 	TLSClientConfig *tls.Config
 
 	// ConnectFilter will filter any CONNECT calls made to the proxy.
-	ConnectFilter func(req *http.Request) (action ConnectAction, resp *http.Response)
+	ConnectFilter func(w http.ResponseWriter, req *http.Request) (action ConnectAction)
 
 	// FlushInterval specifies the flush interval
 	// to flush to the client while copying the
@@ -60,13 +60,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.ConnectFilter == nil {
 			p.mitmConnect(w, r) // Mitm all by default
 		} else {
-			filterAction, filterResp := p.ConnectFilter(r)
+			filterAction := p.ConnectFilter(w, r)
 			if filterAction == ConnectMitm {
 				p.mitmConnect(w, r)
 			} else if filterAction == ConnectBypass {
 				panic(errors.New("Bypass not implemented"))
 			} else if filterAction == ConnectDeny {
-				filterResp.Write(w)
+				; // The filter already sent the response
 			}
 		}
 		return
@@ -108,7 +108,6 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 		sconn *tls.Conn
 		name  = dnsName(r.Host)
 	)
-	fmt.Println("NEW MITM'D CONNECTION: " + r.RemoteAddr)
 
 	if name == "" {
 		log.Println("cannot determine cert name for " + r.Host)

@@ -47,15 +47,15 @@ func NewInkfish(signer *CertSigner) *Inkfish {
 	proxy.Proxy.Wrap = func(connectReq *http.Request, scheme string, upstream http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if allowed := proxy.RequestFilter(connectReq, scheme, w, r); allowed {
-				// Pass through
-				//log.Println("ACCEPTED")
 				upstream.ServeHTTP(w, r)
 			} else {
 				// We dropped it...
 			}
 		})
 	}
-
+	proxy.Proxy.ConnectFilter = func(w http.ResponseWriter, r *http.Request) ConnectAction {
+		return proxy.FilterConnect(w, r)
+	}
 	return proxy
 }
 
@@ -86,6 +86,7 @@ func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
 }
 
 func defaultConnectFilter(host string, port int) bool {
+	fmt.Println("In default connect filter")
 	return port == 443
 }
 
@@ -179,8 +180,6 @@ func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w h
 	//fmt.Println("--------")
 	//fmt.Println(req)
 	var user string
-	fmt.Println("REQUEST SCHEME: " + scheme)
-	fmt.Println("connect request: ", connectReq)
 	if scheme == "https" {
 		// Since this is an http request, we authenticate from the connect request
 		var err error

@@ -172,7 +172,6 @@ func (m *LocalHostIsMeMetadataProvider) Lookup(s string) (string, bool) {
 // TESTS
 // -----
 
-/*
 func TestConnectFilter(t *testing.T) {
 	// The default connect filter should block TLS traffic to the local test server,
 	// because it's not running on port 443
@@ -199,8 +198,6 @@ func TestConnectFilter(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "Forbidden")
 }
-*/
-
 
 func TestAllowFooNotBar(t *testing.T) {
 	acl1 := MustParseAcl(`
