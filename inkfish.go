@@ -185,7 +185,6 @@ func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w h
 		var err error
 		//fmt.Println(connectReq)
 		user, err = proxy.authenticateClient(connectReq)
-		fmt.Println("Authenticated via creds on CONNECT as: " + user)
 		if err != nil || user == badUser {
 			proxy.ctxLogf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
 			fmt.Printf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)

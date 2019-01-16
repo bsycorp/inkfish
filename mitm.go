@@ -175,7 +175,6 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 
 	ch := make(chan int)
 	wc := &onCloseConn{cconn, func() { ch <- 0 }}
-	fmt.Println("HTTPS CONTEXT SUPER IMPORTANT IS: ", r.Header.Get("Proxy-Authorization"))
 
 	// TODO: DEEP COPY REQUEST
 	fixme := cloneRequest(r)
