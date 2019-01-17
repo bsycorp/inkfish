@@ -81,7 +81,7 @@ func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
 	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return errors.Wrap(err, "failed to parse CA certificate")
 	}
-	proxy.CertSigner = NewCertSigner(&ca)
+	proxy.Proxy.CertSigner = NewCertSigner(&ca)
 	return nil
 }
 
