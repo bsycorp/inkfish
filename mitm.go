@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"sync"
 	"time"
 )
@@ -75,32 +74,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rp := &httputil.ReverseProxy{
 		Director:      httpDirector,
 		FlushInterval: p.FlushInterval,
+		Transport:     &http.Transport{
+			DisableCompression: true,
+		},
 	}
 	p.Wrap(nil, "http", rp).ServeHTTP(w, r)
 }
-
-func cloneRequest(r *http.Request) *http.Request {
-	r2 := new(http.Request)
-	*r2 = *r
-
-	// Deep copy the URL because it isn't
-	// a map and the URL is mutable by users
-	// of WithContext.
-	if r.URL != nil {
-		r2URL := new(url.URL)
-		*r2URL = *r.URL
-		r2.URL = r2URL
-	}
-	r2.Header = make(map[string][]string)
-
-	for k,v := range r.Header {
-		r2.Header[k] = v
-	}
-
-	return r2
-}
-
-
 
 func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -176,12 +155,7 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan int)
 	wc := &onCloseConn{cconn, func() { ch <- 0 }}
 
-	// TODO: DEEP COPY REQUEST
-	fixme := cloneRequest(r)
-
-	// END TODO: DEEP COPY REQUEST
-
-	http.Serve(&oneShotListener{wc}, p.Wrap(fixme, "https", rp))
+	http.Serve(&oneShotListener{wc}, p.Wrap(r, "https", rp))
 	<-ch
 }
 
