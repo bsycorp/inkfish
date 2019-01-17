@@ -60,11 +60,15 @@ func init() {
 // -------------------
 
 func NewInsecureInkfish() (*Inkfish) {
-	// Disable client's TLS validation so we can connect to the test server
-	ClientInsecureSkipVerify = true
 	r := NewInkfish(NewCertSigner(&StubCA))
+
 	// Allow CONNECT to any port, not just 443
 	r.ConnectFilter = connectFilterAllowAny
+
+	// Disable client's TLS validation so we can connect to the test server
+	r.Proxy.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 	return r
 }
 
@@ -84,19 +88,13 @@ func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
 	proxyUrl, _ := url.Parse(it.Server.URL)
 	proxyUrl.User = userInfo
 	acceptAllCerts := &tls.Config{
+		// TODO: verify against own CA?
 		InsecureSkipVerify: true,
-	} // TODO: verify against own CA?
+	}
 	tr := &http.Transport{
 		TLSClientConfig: acceptAllCerts,
 		Proxy: http.ProxyURL(proxyUrl),
-		//Proxy: func(r *http.Request) (*url.URL, error) {
-		//	u := *r.URL
-		//	u.Scheme = "https"
-		//	// u.Host = l.Addr().String()
-		//	return &u, nil
-		//},
 	}
-	// log.Printf("Proxy URL: %v\n", proxyUrl)
 	return &http.Client{Transport: tr}
 }
 

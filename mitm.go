@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"sync"
 	"time"
 )
 
@@ -84,7 +83,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 	var (
 		err   error
-		//sconn *tls.Conn
 		name  = dnsName(r.Host)
 	)
 
@@ -106,20 +104,6 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 		*sConfig = *p.TLSServerConfig
 	}
 	sConfig.Certificates = []tls.Certificate{*provisionalCert}
-	//sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	//	// This path means client did SNI
-	//	cConfig := new(tls.Config)
-	//	if p.TLSClientConfig != nil {
-	//		*cConfig = *p.TLSClientConfig
-	//	}
-	//	cConfig.ServerName = hello.ServerName
-	//	sconn, err = tls.Dial("tcp", r.Host, cConfig)
-	//	if err != nil {
-	//		log.Println("dial", r.Host, err)
-	//		return nil, err
-	//	}
-	//	return p.cert(hello.ServerName)
-	//}
 
 	cconn, err := handshake(w, sConfig)
 	if err != nil {
@@ -127,30 +111,17 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cconn.Close()
-	//if sconn == nil {
-	//	// The is the "non SNI" path
-	//	cConfig := new(tls.Config)
-	//	if p.TLSClientConfig != nil {
-	//		*cConfig = *p.TLSClientConfig
-	//	}
-	//	sconn, err = tls.Dial("tcp", r.Host, cConfig)
-	//	if err != nil {
-	//		log.Println("dial", r.Host, err)
-	//		return
-	//	}
-	//}
-	//defer sconn.Close()
 
-	//od := &oneShotDialer{c: sconn}
+	cConfig := new(tls.Config)
+	if p.TLSClientConfig != nil {
+		*cConfig = *p.TLSClientConfig
+
+	}
 	rp := &httputil.ReverseProxy{
 		Director:      httpsDirector,
 		Transport:     &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-			//DialTLS: od.Dial,
+			TLSClientConfig: cConfig,
 			DisableCompression: true,
-			// Proxy: http.ProxyFromEnvironment, // TODO: TEST ME!!
 		},
 		FlushInterval: p.FlushInterval,
 	}
@@ -163,7 +134,7 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) bypassConnect(w http.ResponseWriter, r *http.Request) {
-	dest_conn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
+	destConn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
@@ -174,12 +145,12 @@ func (p *Proxy) bypassConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
 		return
 	}
-	client_conn, _, err := hijacker.Hijack()
+	clientConn, _, err := hijacker.Hijack()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	}
-	go transfer(dest_conn, client_conn)
-	go transfer(client_conn, dest_conn)
+	go transfer(destConn, clientConn)
+	go transfer(clientConn, destConn)
 }
 
 func transfer(destination io.WriteCloser, source io.ReadCloser) {
@@ -193,6 +164,7 @@ func (p *Proxy) cert(names ...string) (*tls.Certificate, error) {
 	return &cert, err
 }
 
+// TODO: this should be 1.0 or 1.1 depending on what client asked for
 var okHeader = []byte("HTTP/1.1 200 OK\r\n\r\n")
 
 // handshake hijacks w's underlying net.Conn, responds to the CONNECT request
@@ -235,38 +207,6 @@ func dnsName(addr string) string {
 		return ""
 	}
 	return host
-}
-
-// namesOnCert returns the dns names
-// in the peer's presented cert.
-//func namesOnCert(conn *tls.Conn) []string {
-//	// TODO(kr): handle IP addr SANs.
-//	c := conn.ConnectionState().PeerCertificates[0]
-//	if len(c.DNSNames) > 0 {
-//		// If Subject Alt Name is given,
-//		// we ignore the common name.
-//		// This matches behavior of crypto/x509.
-//		return c.DNSNames
-//	}
-//	return []string{c.Subject.CommonName}
-//}
-
-// A oneShotDialer implements net.Dialer whos Dial only returns a
-// net.Conn as specified by c followed by an error for each subsequent Dial.
-type oneShotDialer struct {
-	c  net.Conn
-	mu sync.Mutex
-}
-
-func (d *oneShotDialer) Dial(network, addr string) (net.Conn, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.c == nil {
-		return nil, errors.New("closed")
-	}
-	c := d.c
-	d.c = nil
-	return c, nil
 }
 
 // A oneShotListener implements net.Listener whos Accept only returns a

@@ -18,10 +18,6 @@ const AccessDenied = `
 ************************
 `
 
-// Set this to true if you want the proxy's HTTP client to ignore TLS errors.
-// Not recommended...
-var ClientInsecureSkipVerify = false
-
 type Inkfish struct {
 	Acls             []Acl
 	Passwd           []UserEntry
@@ -34,9 +30,6 @@ type Inkfish struct {
 func NewInkfish(signer *CertSigner) *Inkfish {
 	proxy := &Inkfish{
 		Proxy: &Proxy{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
 			TLSServerConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
 			},
@@ -90,12 +83,10 @@ func defaultConnectFilter(host string, port int) bool {
 
 func sendAccessDenied(w http.ResponseWriter) {
 	w.WriteHeader(403)
-	//w.Header().Add("Connection", "close")
 	w.Write([]byte(AccessDenied))
 }
 
 func (proxy *Inkfish) FilterConnect(w http.ResponseWriter, r *http.Request) (action ConnectAction) {
-	// TODO: what if host doesn't correspond with r.URI or whatever?
 	host := r.Host
 
 	// Handle a CONNECT request
@@ -150,9 +141,9 @@ func (proxy *Inkfish) FilterConnect(w http.ResponseWriter, r *http.Request) (act
 	user, err = proxy.authenticateClient(r)
 	if err != nil || user == badUser {
 		proxy.ctxLogf("client: %v: authentication error during connect: %v", r.RemoteAddr, err)
-		// We don't bail early here, we set badUser and let ACLs handle it all later. Why? Well, when you
-		// fail during CONNECT / tunnel establishment, clients usually don't handle it well. Clients will
-		// get much nicer errors if we reject tunneled requests instead.
+		// We don't bail early here, we set badUser and let ACLs handle it all later. When you
+		// fail during CONNECT / tunnel establishment, clients usually don't handle it well. Clients
+		// will tend to handle errors better if we reject tunneled requests instead.
 	}
 
 	// Search for an MITM bypass directive
@@ -175,13 +166,10 @@ func (proxy *Inkfish) FilterConnect(w http.ResponseWriter, r *http.Request) (act
 }
 
 func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w http.ResponseWriter, req *http.Request) bool {
-	//fmt.Println("--------")
-	//fmt.Println(req)
 	var user string
+	var err error
 	if scheme == "https" {
 		// Since this is an http request, we authenticate from the connect request
-		var err error
-		//fmt.Println(connectReq)
 		user, err = proxy.authenticateClient(connectReq)
 		if err != nil || user == badUser {
 			proxy.ctxLogf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
@@ -190,9 +178,7 @@ func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w h
 	}
 	if scheme == "http" {
 		// This is a non-tunneled request or for whatever reason, we don't have cached creds.
-		var err error
 		user, err = proxy.authenticateClient(req)
-		//fmt.Println("Authenticated as: " + user)
 		if err != nil || user == badUser {
 			proxy.ctxLogf("client: %v: authentication error during request: %v", req.RemoteAddr, err)
 			// Don't bail out, user will come back as INVALID and get rejected by ACL
