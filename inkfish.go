@@ -3,7 +3,6 @@ package inkfish
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
