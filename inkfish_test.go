@@ -312,39 +312,39 @@ func TestAnonymousAccess(t *testing.T) {
 }
 
 
-//func TestMitmBypassByUser(t *testing.T) {
-//	proxy := NewInsecureInkfish()
-//	proxy.Passwd = passwdFooBarBaz
-//
-//	s := NewInkfishTest(proxy)
-//	defer s.Close()
-//
-//	// Figure out host and port for bypass
-//	u, _ := url.Parse(srv_https.URL)
-//
-//	// Gotta do ACLs last so we know the right server port.
-//	acl1 := MustParseAcl(fmt.Sprintf(`
-//		from user:foo
-//		bypass ^%v$
-//	`, strings.Replace(u.Host, ".", "\\.", -1)))
-//	acl2 := MustParseAcl(`
-//		from user:bar
-//		url ^.*/bar$
-//	`)
-//	proxy.Acls = []Acl{acl1,acl2}
-//
-//	// This test relies on there being no ACL to allow requests
-//	// to the server port for "foo", so if the request is allowed it must be
-//	// because MITM was successfully bypassed.
-//	client := s.Client(url.UserPassword("foo", "foo"))
-//	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
-//	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
-//
-//	// User bar should be Acl'd as usual because they don't have bypass.
-//	client = s.Client(url.UserPassword("bar", "bar"))
-//	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-//	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
-//}
+func TestMitmBypassByUser(t *testing.T) {
+	proxy := NewInsecureInkfish()
+	proxy.Passwd = passwdFooBarBaz
+
+	s := NewInkfishTest(proxy)
+	defer s.Close()
+
+	// Figure out host and port for bypass
+	u, _ := url.Parse(srv_https.URL)
+
+	// Gotta do ACLs last so we know the right server port.
+	acl1 := MustParseAcl(fmt.Sprintf(`
+		from user:foo
+		bypass ^%v$
+	`, strings.Replace(u.Host, ".", "\\.", -1)))
+	acl2 := MustParseAcl(`
+		from user:bar
+		url ^.*/bar$
+	`)
+	proxy.Acls = []Acl{acl1,acl2}
+
+	// This test relies on there being no ACL to allow requests
+	// to the server port for "foo", so if the request is allowed it must be
+	// because MITM was successfully bypassed.
+	client := s.Client(url.UserPassword("foo", "foo"))
+	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
+	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+
+	// User bar should be Acl'd as usual because they don't have bypass.
+	client = s.Client(url.UserPassword("bar", "bar"))
+	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
+	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+}
 
 
 func TestMultipleUserPasswords(t *testing.T) {
