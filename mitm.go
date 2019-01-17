@@ -84,7 +84,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 	var (
 		err   error
-		sconn *tls.Conn
+		//sconn *tls.Conn
 		name  = dnsName(r.Host)
 	)
 
@@ -127,25 +127,28 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cconn.Close()
-	if sconn == nil {
-		// The is the "non SNI" path
-		cConfig := new(tls.Config)
-		if p.TLSClientConfig != nil {
-			*cConfig = *p.TLSClientConfig
-		}
-		sconn, err = tls.Dial("tcp", r.Host, cConfig)
-		if err != nil {
-			log.Println("dial", r.Host, err)
-			return
-		}
-	}
-	defer sconn.Close()
+	//if sconn == nil {
+	//	// The is the "non SNI" path
+	//	cConfig := new(tls.Config)
+	//	if p.TLSClientConfig != nil {
+	//		*cConfig = *p.TLSClientConfig
+	//	}
+	//	sconn, err = tls.Dial("tcp", r.Host, cConfig)
+	//	if err != nil {
+	//		log.Println("dial", r.Host, err)
+	//		return
+	//	}
+	//}
+	//defer sconn.Close()
 
-	od := &oneShotDialer{c: sconn}
+	//od := &oneShotDialer{c: sconn}
 	rp := &httputil.ReverseProxy{
 		Director:      httpsDirector,
 		Transport:     &http.Transport{
-			DialTLS: od.Dial,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			//DialTLS: od.Dial,
 			DisableCompression: true,
 			// Proxy: http.ProxyFromEnvironment, // TODO: TEST ME!!
 		},
