@@ -190,12 +190,21 @@ func handshake(w http.ResponseWriter, config *tls.Config) (net.Conn, error) {
 	return conn, nil
 }
 
+func unsetUserAgent(r *http.Request) {
+	if _, ok := r.Header["User-Agent"]; !ok {
+		// Explicitly disable User-Agent so it's not set to default value
+		r.Header.Set("User-Agent", "")
+	}
+}
+
 func httpDirector(r *http.Request) {
+	unsetUserAgent(r)
 	r.URL.Host = r.Host
 	r.URL.Scheme = "http"
 }
 
 func httpsDirector(r *http.Request) {
+	unsetUserAgent(r)
 	r.URL.Host = r.Host
 	r.URL.Scheme = "https"
 }
