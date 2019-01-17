@@ -127,20 +127,20 @@ func (p *Proxy) mitmConnect(w http.ResponseWriter, r *http.Request) {
 		*sConfig = *p.TLSServerConfig
 	}
 	sConfig.Certificates = []tls.Certificate{*provisionalCert}
-	sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		// This path means client did SNI
-		cConfig := new(tls.Config)
-		if p.TLSClientConfig != nil {
-			*cConfig = *p.TLSClientConfig
-		}
-		cConfig.ServerName = hello.ServerName
-		sconn, err = tls.Dial("tcp", r.Host, cConfig)
-		if err != nil {
-			log.Println("dial", r.Host, err)
-			return nil, err
-		}
-		return p.cert(hello.ServerName)
-	}
+	//sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	//	// This path means client did SNI
+	//	cConfig := new(tls.Config)
+	//	if p.TLSClientConfig != nil {
+	//		*cConfig = *p.TLSClientConfig
+	//	}
+	//	cConfig.ServerName = hello.ServerName
+	//	sconn, err = tls.Dial("tcp", r.Host, cConfig)
+	//	if err != nil {
+	//		log.Println("dial", r.Host, err)
+	//		return nil, err
+	//	}
+	//	return p.cert(hello.ServerName)
+	//}
 
 	cconn, err := handshake(w, sConfig)
 	if err != nil {
