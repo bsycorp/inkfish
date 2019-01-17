@@ -86,7 +86,6 @@ func (proxy *Inkfish) SetCA(caCert, caKey []byte) error {
 }
 
 func defaultConnectFilter(host string, port int) bool {
-	fmt.Println("In default connect filter")
 	return port == 443
 }
 
