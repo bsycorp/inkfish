@@ -187,7 +187,6 @@ func (proxy *Inkfish) RequestFilter(connectReq *http.Request, scheme string, w h
 		user, err = proxy.authenticateClient(connectReq)
 		if err != nil || user == badUser {
 			proxy.ctxLogf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
-			fmt.Printf("client: %v: authentication error during request: %v", connectReq.RemoteAddr, err)
 			// Don't bail out, user will come back as INVALID and get rejected by ACL
 		}
 	}
