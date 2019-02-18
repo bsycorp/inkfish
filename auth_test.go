@@ -60,7 +60,7 @@ func templateHttpRequest() (*http.Request) {
 func TestAuthenticateClientByValidCreds(t *testing.T) {
 	// If the client sends a proxy-auth header with valid creds,
 	// the calling user should be taken from the header
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.Passwd = []UserEntry{ // foo:foo
 		{ Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae" },
 	}
@@ -74,7 +74,7 @@ func TestAuthenticateClientByValidCreds(t *testing.T) {
 func TestAuthenticateClientByInvalidCreds(t *testing.T) {
 	// If the client sends a proxy-auth header but the credentials
 	// are not valid, the calling user should be INVALID
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.Passwd = []UserEntry{ // foo:foo
 		{ Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae" },
 	}
@@ -101,7 +101,7 @@ func TestAuthenticateClientAnonymous(t *testing.T) {
 	// Without any metadata lookup or proxy-auth headers, the calling
 	// user should be ANONYMOUS
 	req := templateHttpRequest()
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	res, err := proxy.authenticateClient(req)
 	assert.Equal(t, "ANONYMOUS", res)
 	assert.Nil(t, err)
@@ -119,7 +119,7 @@ func (m *testMetadataProvider) Lookup(s string) (string, bool) {
 }
 
 func TestAuthenticateClientByMetadata(t *testing.T) {
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.MetadataProvider = &testMetadataProvider{}
 
 	req := templateHttpRequest()

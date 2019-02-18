@@ -8,8 +8,7 @@ https://hub.docker.com/r/bsycorp/inkfish
 ## About
 
 This is a non-caching forward (aka egress/outbound) proxy, used to implement URL 
-white-listing for applications. It is a fairly thin layer around the excellent 
-[goproxy](https://github.com/elazarl/goproxy/) framework.
+white-listing for applications. 
 
 Key features:
 
@@ -61,7 +60,7 @@ from <user> [user2 user3...]
 from ...
 acl [METHOD,METHOD2] <url-regex>
 acl ...
-bypass <host:port>
+bypass <host-port-regex>
 bypass ...
 ```
 
@@ -79,22 +78,19 @@ methods to match the ACL. Typical "whole-host" acls look like:
 
 * `acl ^http(s)?://foo\.com/`
 
-WARNING: it is generally an error to forget the trailing `/`, as this would cause the regular expression
+WARNING: it is generally a mistake to forget the trailing `/`, as this would cause the regular expression
 to match things like `https://foo.com.au/evilthing` as well as the intended domain `https://foo.com/`. 
-Similarly, it is usually an error to forget to escape dots with backslashes as this can also cause 
+Similarly, it is usually a mistake to forget to escape dots with backslashes as this can also cause 
 unintended matches.
 
 A more complex acl example might look like:
 
 * `acl HEAD,GET,POST ^http(s)://api\.foo\.com/v2/
 
-The `bypass` directive is used to disable TLS MITM for specific hosts. The "host:port" portion of the
-request is matched directly against the client's CONNECT request. For example:
+The `bypass` directive is used to disable TLS MITM for specific hosts. You should supply a regular 
+expression which can be matched directly against the client's CONNECT request. For example:
 
-* `bypass my-super-bucket.ap-southeast-2.amazonaws.com:443`
-
-You must specify the port in the bypass target. The bypass target is not a regular expression and 
-must match exactly.
+* `bypass ^my-super-bucket\.ap-southeast-2\.amazonaws\.com:443$`
 
 ## Metadata lookup
 
@@ -113,23 +109,8 @@ acl ^http(s)?://.*$
 
 To grant instances with that tag unrestricted outbound HTTP(s) access.
 
-## MITM, SSL certificates and Security
-
-By default, Inkfish's HTTP client will perform SSL/TLS certificate validation on all forwarded requests. A
-good way to test this is working properly is to start the proxy locally and visit https://badssl.com/dashboard/
-
-There are a variety of strategies that MITM proxies can use to create acceptable certificates for clients.
-
-Some proxies "sneak and peek", attempting to mirror the origin server's certificate as closely as possible,
-with the exception of the signing CA. 
-
-This is not one of those proxies.  Inkfish inherits the goproxy strategy of looking at the client's CONNECT 
-target and just generating a cert with that in it. 
-
 ## Known issues / TODO
 
 * Generated certs for sites expire in 2049(!)
-* Potential file descriptor leak on SSL connections.
 * Graceful shutdown / draining not tested
-
 

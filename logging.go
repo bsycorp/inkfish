@@ -2,7 +2,7 @@ package inkfish
 
 import (
 	"fmt"
-	"github.com/elazarl/goproxy"
+	"log"
 	"net/url"
 )
 
@@ -23,19 +23,22 @@ type RequestLogEntry struct {
 	Reason     string
 }
 
-func (proxy *Inkfish) ctxPrintf(ctx *goproxy.ProxyCtx, msg string, argv ...interface{}) {
-	proxy.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+const sessionId = 31337 // TODO
+
+func (proxy *Inkfish) ctxPrintf(msg string, argv ...interface{}) {
+	// 2 << 19 => 524288, max session id in logs before wrap-around
+	log.Printf("[%06d] "+msg+"\n", append([]interface{}{sessionId & 2 << 19}, argv...)...)
 }
 
-func (proxy *Inkfish) ctxLogf(ctx *goproxy.ProxyCtx, msg string, argv ...interface{}) {
-	proxy.ctxPrintf(ctx, "INFO: "+msg, argv...)
+func (proxy *Inkfish) ctxLogf(msg string, argv ...interface{}) {
+	log.Printf("INFO: "+msg, argv...)
 }
 
-func (proxy *Inkfish) ctxWarnf(ctx *goproxy.ProxyCtx, msg string, argv ...interface{}) {
-	proxy.ctxPrintf(ctx, "WARN: "+msg, argv...)
+func (proxy *Inkfish) ctxWarnf(msg string, argv ...interface{}) {
+	log.Printf("WARN: "+msg, argv...)
 }
 
-func (proxy *Inkfish) logConnect(ctx *goproxy.ProxyCtx, e ConnectLogEntry) {
+func (proxy *Inkfish) logConnect(e ConnectLogEntry) {
 	msg := fmt.Sprintf("CONNECT: %v %v %v %v",
 		e.RemoteAddr,
 		e.User,
@@ -45,10 +48,10 @@ func (proxy *Inkfish) logConnect(ctx *goproxy.ProxyCtx, e ConnectLogEntry) {
 	if len(e.Reason) > 0 {
 		msg = msg + " [" + e.Reason + "]"
 	}
-	proxy.ctxLogf(ctx, "%v", msg)
+	log.Printf("%v", msg)
 }
 
-func (proxy *Inkfish) logRequest(ctx *goproxy.ProxyCtx, e RequestLogEntry) {
+func (proxy *Inkfish) logRequest(e RequestLogEntry) {
 	var hasParamsHint string
 	if len(e.Url.Query()) > 0 {
 		hasParamsHint = "?..."
@@ -69,5 +72,5 @@ func (proxy *Inkfish) logRequest(ctx *goproxy.ProxyCtx, e RequestLogEntry) {
 	if len(e.Reason) > 0 {
 		msg = msg + " [" + e.Reason + "]"
 	}
-	proxy.ctxLogf(ctx, "%v", msg)
+	log.Printf("%v", msg)
 }

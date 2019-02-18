@@ -60,11 +60,15 @@ func init() {
 // -------------------
 
 func NewInsecureInkfish() (*Inkfish) {
-	// Disable client's TLS validation so we can connect to the test server
-	ClientInsecureSkipVerify = true
-	r := NewInkfish()
+	r := NewInkfish(NewCertSigner(&StubCA))
+
 	// Allow CONNECT to any port, not just 443
 	r.ConnectFilter = connectFilterAllowAny
+
+	// Disable client's TLS validation so we can connect to the test server
+	r.Proxy.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 	return r
 }
 
@@ -83,8 +87,14 @@ func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
 func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
 	proxyUrl, _ := url.Parse(it.Server.URL)
 	proxyUrl.User = userInfo
-	acceptAllCerts := &tls.Config{InsecureSkipVerify: true} // TODO: verify against own CA?
-	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
+	acceptAllCerts := &tls.Config{
+		// TODO: verify against own CA?
+		InsecureSkipVerify: true,
+	}
+	tr := &http.Transport{
+		TLSClientConfig: acceptAllCerts,
+		Proxy: http.ProxyURL(proxyUrl),
+	}
 	return &http.Client{Transport: tr}
 }
 
@@ -106,6 +116,7 @@ func get(client *http.Client, url string) (int, []byte, error) {
 }
 
 func getExpect(t *testing.T, client *http.Client, url string, expectCode int, expectBody []byte) []byte {
+	t.Helper()
 	statusCode, body, err := get(client, url)
 	if err != nil {
 		t.Fatal("Can't fetch url", url, err)
@@ -166,7 +177,7 @@ func TestConnectFilter(t *testing.T) {
 		from tag:me
 		url ^.*$
 	`)
-	proxy := NewInkfish()
+	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.MetadataProvider = &LocalHostIsMeMetadataProvider{}
 	proxy.Acls = []Acl{acl1}
 	s := NewInkfishTest(proxy)
@@ -232,8 +243,11 @@ func TestAllowWithAuth(t *testing.T) {
 	client = s.Client(url.UserPassword("bar", "bar"))
 	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
 	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
+	fmt.Println("HERE0")
 	getExpect(t, client, srv_plain.URL+"/bar", 200, []byte("bar"))
+	fmt.Println("HERE1")
 	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+	fmt.Println("HERE2")
 
 	// Baz gets nothing
 	client = s.Client(url.UserPassword("baz", "baz"))
@@ -295,6 +309,7 @@ func TestAnonymousAccess(t *testing.T) {
 	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
 }
 
+
 func TestMitmBypassByUser(t *testing.T) {
 	proxy := NewInsecureInkfish()
 	proxy.Passwd = passwdFooBarBaz
@@ -328,6 +343,7 @@ func TestMitmBypassByUser(t *testing.T) {
 	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
 	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
 }
+
 
 func TestMultipleUserPasswords(t *testing.T) {
 	// TODO: test that the same user with multiple passwords set, works
