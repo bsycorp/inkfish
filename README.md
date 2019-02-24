@@ -58,8 +58,8 @@ be allowed through the proxy. The general format looks like:
 ```
 from <user> [user2 user3...]
 from ...
-acl [METHOD,METHOD2] <url-regex>
-acl ...
+url [METHOD,METHOD2] <url-regex>
+url ...
 bypass <host-port-regex>
 bypass ...
 ```
@@ -69,33 +69,38 @@ The <user> may be specified as:
 
 * `user:foo` - Identifies a client who will supply a proxy-authorization header with a username of `foo`.
 * `tag:foo` - Identifies a client whose cloud metadata (e.g. instance ProxyUser tag in AWS) is `foo`.
-* `ANONYMOUS` - Identifies a user or system which does not supply a proxy-authorization header and 
+* `ANONYMOUS` - Identifies a user or system which does not supply a proxy-authorization header and
                does not have any identifying metadata tags.
 
-The `acl` directive is used to permit requests according to a regular expression matching a URL.. You 
-may optionally specify one or more methods in the ACL, causing only requests made with one of the listed 
+The `acl` directive is used to permit requests according to a regular expression matching a URL.. You
+may optionally specify one or more methods in the ACL, causing only requests made with one of the listed
 methods to match the ACL. Typical "whole-host" acls look like:
 
 * `acl ^http(s)?://foo\.com/`
 
 WARNING: it is generally a mistake to forget the trailing `/`, as this would cause the regular expression
-to match things like `https://foo.com.au/evilthing` as well as the intended domain `https://foo.com/`. 
-Similarly, it is usually a mistake to forget to escape dots with backslashes as this can also cause 
+to match things like `https://foo.com.au/evilthing` as well as the intended domain `https://foo.com/`.
+Similarly, it is usually a mistake to forget to escape dots with backslashes as this can also cause
 unintended matches.
 
 A more complex acl example might look like:
 
 * `acl HEAD,GET,POST ^http(s)://api\.foo\.com/v2/
 
-The `bypass` directive is used to disable TLS MITM for specific hosts. You should supply a regular 
+The `bypass` directive is used to disable TLS MITM for specific hosts. You should supply a regular
 expression which can be matched directly against the client's CONNECT request. For example:
 
 * `bypass ^my-super-bucket\.ap-southeast-2\.amazonaws\.com:443$`
 
+There is also a shorthand for a `url` regex that includes all AWS S3 URL notations
+ (bucket in path and bucket in host) across all regions
+
+* `s3 my-super-bucket`
+
 ## Metadata lookup
 
 Rather than distributing proxy credentials, the preferred method of access control in inkfish is via
-cloud instance metadata. 
+cloud instance metadata.
 
 ### AWS
 
@@ -104,7 +109,7 @@ then in your ACL you would write:
 
 ```
 from tag:foo
-acl ^http(s)?://.*$
+url ^http(s)?://.*$
 ```
 
 To grant instances with that tag unrestricted outbound HTTP(s) access.

@@ -108,7 +108,7 @@ func (c *Acl) bypassMitm(from, hostAndPort string) bool {
 	return false
 }
 
-func parseAclEntry(words []string) (*AclEntry, error) {
+func parseAclURLEntry(words []string) (*AclEntry, error) {
 	// Take a config line like ["url", "GET", ""] and turn it into an AclEntry
 	var aclUrl AclEntry
 	if len(words) != 2 && len(words) != 3 {
@@ -119,15 +119,41 @@ func parseAclEntry(words []string) (*AclEntry, error) {
 	}
 	var urlPattern string
 	if len(words) == 2 {
-		// acl <regexp>
+		// url <regexp>
 		aclUrl.AllMethods = true
 		urlPattern = words[1]
 	} else { // == 3
-		// acl <methodlist> <regexp>
+		// url <methodlist> <regexp>
 		aclUrl.AllMethods = false
 		aclUrl.Methods = strings.Split(words[1], ",")
 		urlPattern = words[2]
 	}
+	re, err := regexp.Compile(urlPattern)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse url pattern")
+	}
+	aclUrl.Pattern = re
+	return &aclUrl, nil
+}
+
+func parseAclS3BucketEntry(words []string) (*AclEntry, error) {
+	// Take a config line like ["bucket", "s3-bucket-name"] and turn it into an AclEntry
+	var aclUrl AclEntry
+	if len(words) != 2 {
+		return nil, errors.New("wrong number of fields (expecting 2)")
+	}
+	if words[0] != "s3" {
+		return nil, errors.New("expecting entry to start with 's3'")
+	}
+	validBucket, bucketErr := regexp.MatchString(`^[a-z0-9\-]+$`, words[1])
+	fmt.Printf("valid bucket: %t", validBucket)
+	if !validBucket || bucketErr != nil {
+		return nil, errors.New("invalid s3 bucket name")
+	}
+	s3UrlPattern := `https?\:\/\/(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/%[1]s|https?\:\/\/%[1]s\.(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/`
+	urlPattern := fmt.Sprintf(s3UrlPattern, words[1])
+
+	aclUrl.AllMethods = true
 	re, err := regexp.Compile(urlPattern)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse url pattern")
@@ -148,7 +174,13 @@ func parseAcl(lines []string) (*Acl, error) {
 		if words[0] == "from" {
 			aclConfig.From = append(aclConfig.From, words[1:]...)
 		} else if words[0] == "url" {
-			newEntry, err := parseAclEntry(words)
+			newEntry, err := parseAclURLEntry(words)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("config error at line: %v", line_no+1))
+			}
+			aclConfig.Entries = append(aclConfig.Entries, *newEntry)
+		} else if words[0] == "s3" {
+			newEntry, err := parseAclS3BucketEntry(words)
 			if err != nil {
 				return nil, errors.Wrap(err, fmt.Sprintf("config error at line: %v", line_no+1))
 			}
