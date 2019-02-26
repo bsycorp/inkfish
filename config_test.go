@@ -75,16 +75,58 @@ func TestParseAclS3Bucket(t *testing.T) {
 	assert.Empty(t, aclUrl.Methods)
 	assert.Equal(t, expectedExpr, aclUrl.Pattern.String())
 
-	regexp, _ := regexp.Compile(expectedExpr)
-	assert.True(t, regexp.Match([]byte("https://s3.amazonaws.com/my-bucket/woot")))
-	assert.True(t, regexp.Match([]byte("http://s3-somewhere.amazonaws.com/my-bucket/woot")))
-	assert.True(t, regexp.Match([]byte("https://s3-somewhere.amazonaws.com/my-bucket/woot")))
-	assert.True(t, regexp.Match([]byte("http://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
-	assert.True(t, regexp.Match([]byte("https://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
-	assert.False(t, regexp.Match([]byte("https://evil-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
-	assert.False(t, regexp.Match([]byte("https://s3.amazonaws.com/evil-bucket/woot")))
-	assert.False(t, regexp.Match([]byte("https://evil.host/s3.amazonaws.com/evil-bucket/woot")))
-	assert.False(t, regexp.Match([]byte("https://evil.host/https://s3.amazonaws.evil/my-bucket/woot")))
+	re, _ := regexp.Compile(expectedExpr)
+	assert.True(t, re.Match([]byte("https://s3.amazonaws.com/my-bucket/woot")))
+	assert.True(t, re.Match([]byte("http://s3-somewhere.amazonaws.com/my-bucket/woot")))
+	assert.True(t, re.Match([]byte("https://s3-somewhere.amazonaws.com/my-bucket/woot")))
+	assert.True(t, re.Match([]byte("http://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.True(t, re.Match([]byte("https://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.False(t, re.Match([]byte("https://evil-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.False(t, re.Match([]byte("https://s3.amazonaws.com/evil-bucket/woot")))
+	assert.False(t, re.Match([]byte("https://evil.host/s3.amazonaws.com/evil-bucket/woot")))
+	assert.False(t, re.Match([]byte("https://evil.host/https://s3.amazonaws.evil/my-bucket/woot")))
+}
+
+var google_dot_com = "https://google.com/"
+var yahoo_dot_com = "https://yahoo.com/"
+
+func TestFromAuthenticated(t *testing.T) {
+	aclConfig, err := parseAcl([]string{
+		"from AUTHENTICATED",
+		"url ^http(s)?://google.com/",
+	})
+	assert.NotNil(t, aclConfig)
+	assert.Nil(t, err)
+
+	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
+	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
+	assert.False(t, aclConfig.permits(badUser, "GET", google_dot_com))
+	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", google_dot_com))
+
+	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(badUser, "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", yahoo_dot_com))
+
+}
+
+func TestFromANYONE(t *testing.T) {
+	aclConfig, err := parseAcl([]string{
+		"from ANYONE",
+		"url ^http(s)?://google.com/",
+	})
+	assert.NotNil(t, aclConfig)
+	assert.Nil(t, err)
+
+	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
+	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
+	assert.True(t, aclConfig.permits(badUser, "GET", google_dot_com))
+	assert.True(t, aclConfig.permits("ANONYMOUS", "GET", google_dot_com))
+
+	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(badUser, "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", yahoo_dot_com))
 }
 
 

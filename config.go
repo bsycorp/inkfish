@@ -79,11 +79,27 @@ func (c *Inkfish) credentialsAreValid(user, password string) bool {
 	return false
 }
 
+func isAuthenticatedUser(from string) bool {
+	return strings.HasPrefix(from, "user:") || strings.HasPrefix(from, "tag:")
+}
+
+func (c *Acl) applies(from string) bool {
+	// Returns true iff the Acl is applicable for the requesting user
+	if listContainsString(c.From, "ANYONE") {
+		return true
+	}
+	if listContainsString(c.From, "AUTHENTICATED") && isAuthenticatedUser(from) {
+		return true
+	}
+	return listContainsString(c.From, from)
+}
+
 func (c *Acl) permits(from, method, url string) bool {
-	// Check whether an acl permits a request. 2 things must be true:
-	// 1) The requesting user must be present in the "From" list of the Acl
+	// Check whether an acl permits a request.
+	// 1) The Acl must apply to the requesting user
 	// 2) The request method and url must match one of the Acl entries
-	if !listContainsString(c.From, from) {
+
+	if !c.applies(from) {
 		return false
 	}
 	for _, e := range c.Entries {
@@ -146,7 +162,6 @@ func parseAclS3BucketEntry(words []string) (*AclEntry, error) {
 		return nil, errors.New("expecting entry to start with 's3'")
 	}
 	validBucket, bucketErr := regexp.MatchString(`^[a-z0-9\-]+$`, words[1])
-	fmt.Printf("valid bucket: %t", validBucket)
 	if !validBucket || bucketErr != nil {
 		return nil, errors.New("invalid s3 bucket name")
 	}

@@ -71,6 +71,8 @@ The <user> may be specified as:
 * `tag:foo` - Identifies a client whose cloud metadata (e.g. instance ProxyUser tag in AWS) is `foo`.
 * `ANONYMOUS` - Identifies a user or system which does not supply a proxy-authorization header and
                does not have any identifying metadata tags.
+* `AUTHENTICATED` - Identifies a client with a tag or valid proxy-authorization credentials.
+* `ANYONE` - Any client. This includes clients with invalid proxy-authorization credentials.
 
 The `acl` directive is used to permit requests according to a regular expression matching a URL.. You
 may optionally specify one or more methods in the ACL, causing only requests made with one of the listed
