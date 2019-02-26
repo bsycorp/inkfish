@@ -3,6 +3,7 @@ package inkfish
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"regexp"
 )
 
 func TestCheckCredentials(t *testing.T) {
@@ -22,11 +23,11 @@ func TestCheckCredentials(t *testing.T) {
 }
 
 func TestParseAclUrl(t *testing.T) {
-	aclUrl, err := parseAclEntry([]string{})
+	aclUrl, err := parseAclURLEntry([]string{})
 	assert.Nil(t, aclUrl)
 	assert.NotNil(t, err)
 
-	aclUrl, err = parseAclEntry([]string{"foo", "bar", "baz"})
+	aclUrl, err = parseAclURLEntry([]string{"foo", "bar", "baz"})
 	assert.Nil(t, aclUrl)
 	assert.NotNil(t, err)
 
@@ -34,7 +35,7 @@ func TestParseAclUrl(t *testing.T) {
 
 	// 2-form
 	// url ^http://boards\.4chan\.org/b/
-	aclUrl, err = parseAclEntry([]string{"url", url})
+	aclUrl, err = parseAclURLEntry([]string{"url", url})
 	assert.NotNil(t, aclUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, true, aclUrl.AllMethods)
@@ -43,13 +44,49 @@ func TestParseAclUrl(t *testing.T) {
 
 	// 3-form
 	// url GET,POST,HEAD ^http://boards\.4chan\.org/b/
-	aclUrl, err = parseAclEntry([]string{"url", "GET,POST,HEAD", url})
+	aclUrl, err = parseAclURLEntry([]string{"url", "GET,POST,HEAD", url})
 	assert.NotNil(t, aclUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, false, aclUrl.AllMethods)
 	assert.Equal(t, []string{"GET", "POST", "HEAD"}, aclUrl.Methods)
 	assert.Equal(t, url, aclUrl.Pattern.String())
 }
+
+func TestParseAclS3Bucket(t *testing.T) {
+	aclUrl, err := parseAclS3BucketEntry([]string{})
+	assert.Nil(t, aclUrl)
+	assert.NotNil(t, err)
+
+	//invalid bucket name
+	aclUrl, err = parseAclS3BucketEntry([]string{"s3", "weird.WRONG.*bucket"})
+	assert.Nil(t, aclUrl)
+	assert.NotNil(t, err)
+
+	aclUrl, err = parseAclS3BucketEntry([]string{"foo", "bar", "baz"})
+	assert.Nil(t, aclUrl)
+	assert.NotNil(t, err)
+
+	bucket := "my-bucket"
+	expectedExpr := `https?\:\/\/(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/my-bucket|https?\:\/\/my-bucket\.(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/`
+	aclUrl, err = parseAclS3BucketEntry([]string{"s3", bucket})
+	assert.NotNil(t, aclUrl)
+	assert.Nil(t, err)
+	assert.Equal(t, true, aclUrl.AllMethods)
+	assert.Empty(t, aclUrl.Methods)
+	assert.Equal(t, expectedExpr, aclUrl.Pattern.String())
+
+	regexp, _ := regexp.Compile(expectedExpr)
+	assert.True(t, regexp.Match([]byte("https://s3.amazonaws.com/my-bucket/woot")))
+	assert.True(t, regexp.Match([]byte("http://s3-somewhere.amazonaws.com/my-bucket/woot")))
+	assert.True(t, regexp.Match([]byte("https://s3-somewhere.amazonaws.com/my-bucket/woot")))
+	assert.True(t, regexp.Match([]byte("http://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.True(t, regexp.Match([]byte("https://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.False(t, regexp.Match([]byte("https://evil-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.False(t, regexp.Match([]byte("https://s3.amazonaws.com/evil-bucket/woot")))
+	assert.False(t, regexp.Match([]byte("https://evil.host/s3.amazonaws.com/evil-bucket/woot")))
+	assert.False(t, regexp.Match([]byte("https://evil.host/https://s3.amazonaws.evil/my-bucket/woot")))
+}
+
 
 func TestBrokenAclConfigs(t *testing.T) {
 	aclConfig, err := parseAcl([]string{
