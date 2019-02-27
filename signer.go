@@ -1,15 +1,4 @@
-// The performance impact of the "default" signer is pretty dire. By default it's going to
-// generate certificates on *every* connect. Generating certs is hard work. We cache.
-
-// Rather than vendor the whole of goproxy, we pull the code out of signer.go and modify it
-// for our needs here.
-
-// TODO: expiry in 2049 is not optimal...
-// TODO: caching
-// TODO: cache expiry policy / regeneration
-// TODO: any implications of stripPort? It's not correct but if we only allow 443 it's OK.
-
-// See also: https://github.com/elazarl/goproxy/pull/314 -
+// See also: https://github.com/elazarl/goproxy/pull/314
 // And: https://github.com/elazarl/goproxy/pull/284 - We add cert caching in a different way.
 // And: https://github.com/elazarl/goproxy/pull/256 - This could be important; there's an fd leak
 
@@ -32,6 +21,8 @@ import (
 )
 
 const signerVersion = ":inkfish1"
+const maxCertificateLifetimeDays = 84
+const rsaKeyBits = 2048
 
 type CertSigner struct {
 	CA *tls.Certificate
@@ -44,7 +35,7 @@ func NewCertSigner(ca *tls.Certificate) (*CertSigner) {
 	signer := CertSigner{}
 	signer.CA = ca
 	signer.TlsConfig = &tls.Config{
-		InsecureSkipVerify: false, // TODO, maybe key this off ClientInsecureSkipVerify
+		InsecureSkipVerify: false,
 	}
 	signer.CertCache = map[string]tls.Certificate{}
 	signer.CertCacheMutex = &sync.Mutex{}
@@ -97,12 +88,11 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 		return cachedCert, nil
 	}
 
-	// Use the provided ca and not the global GoproxyCa for certificate generation.
 	if x509ca, err = x509.ParseCertificate(certSigner.CA.Certificate[0]); err != nil {
 		return
 	}
-	start := time.Unix(0, 0)
-	end, err := time.Parse("2006-01-02", "2049-12-31")
+	start := time.Now().Add(time.Duration(-5) * time.Minute)
+	end := time.Now().AddDate(0, 0, maxCertificateLifetimeDays)
 	if err != nil {
 		panic(err)
 	}
@@ -136,7 +126,7 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 		}
 	}
 	var certpriv *rsa.PrivateKey
-	if certpriv, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
+	if certpriv, err = rsa.GenerateKey(rand.Reader, rsaKeyBits); err != nil {
 		return
 	}
 	var derBytes []byte

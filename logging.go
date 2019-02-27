@@ -18,7 +18,7 @@ type RequestLogEntry struct {
 	RemoteAddr string
 	User       string
 	Method     string
-	Url        *url.URL
+	Url        url.URL
 	Result     string
 	Reason     string
 }
@@ -51,22 +51,25 @@ func (proxy *Inkfish) logConnect(e ConnectLogEntry) {
 	log.Printf("%v", msg)
 }
 
-func (proxy *Inkfish) logRequest(e RequestLogEntry) {
+func sanitiseURL(u url.URL) string {
 	var hasParamsHint string
-	if len(e.Url.Query()) > 0 {
+	if len(u.Query()) > 0 {
 		hasParamsHint = "?..."
 	}
 	sanitisedUrl := url.URL{
-		Scheme: e.Url.Scheme,
-		Host:   e.Url.Host,
-		Path:   e.Url.Path,
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   u.Path,
 	}
-	urlToLog := sanitisedUrl.String() + hasParamsHint
+	return sanitisedUrl.String() + hasParamsHint
+}
+
+func (proxy *Inkfish) logRequest(e RequestLogEntry) {
 	msg := fmt.Sprintf("REQUEST: %v %v %v %v %v",
 		e.RemoteAddr,
 		e.User,
 		e.Method,
-		urlToLog,
+		sanitiseURL(e.Url),
 		e.Result,
 	)
 	if len(e.Reason) > 0 {
