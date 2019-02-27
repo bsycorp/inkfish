@@ -158,7 +158,7 @@ func (proxy *Inkfish) sendAccessDenied(w http.ResponseWriter, detail string) {
 	_, err := w.Write([]byte("INKFISH PROXY DENIED REQUEST: " + detail))
 	if err != nil {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("error writing DENIED response to client: ", err)
+		log.Println("error writing DENIED response to client:", err)
 	}
 }
 
@@ -348,7 +348,7 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	cert, err := proxy.CertSigner.signHost([]string{hostname})
 	if err != nil {
 		proxy.Metrics.CertgenErrors.Inc(1)
-		log.Println("cert", err)
+		log.Println("certgen:", err)
 		http.Error(w, "no upstream", 503)
 		return
 	}
@@ -362,7 +362,7 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	cconn, err := proxy.handshake(w, req, sConfig)
 	if err != nil {
 		proxy.Metrics.HandshakeErrors.Inc(1)
-		log.Println("handshake error", req.Host, err)
+		log.Println("handshake error:", req.Host, err)
 		return
 	}
 	defer cconn.Close()
@@ -385,9 +385,9 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	wc := &onCloseConn{cconn, func() { ch <- 0 }}
 
 	err = http.Serve(&oneShotListener{wc}, proxy.requestHandler(req, "https", rp))
-	if err != nil {
+	if err != nil && err.Error() != "closed" {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("error serving client request", req.Host, err)
+		log.Println("error serving client request:", req.Host, err)
 	}
 	<-ch
 }
@@ -396,7 +396,7 @@ func (proxy *Inkfish) bypassConnect(w http.ResponseWriter, r *http.Request) {
 	destConn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
 	if err != nil {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("dial error in bypass", r.Host, err)
+		log.Println("dial error in bypass:", r.Host, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -404,14 +404,14 @@ func (proxy *Inkfish) bypassConnect(w http.ResponseWriter, r *http.Request) {
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("hijacking not supported in bypass", r.Host)
+		log.Println("hijacking not supported in bypass:", r.Host)
 		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
 		return
 	}
 	clientConn, _, err := hijacker.Hijack()
 	if err != nil {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("error performing hijack in bypass", r.Host, err)
+		log.Println("error performing hijack in bypass:", r.Host, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	}
 	go proxy.transfer(destConn, clientConn)
@@ -424,7 +424,7 @@ func (proxy *Inkfish) transfer(destination io.WriteCloser, source io.ReadCloser)
 	_, err := io.Copy(destination, source)
 	if err != nil {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("transfer error", err)
+		log.Println("transfer error:", err)
 	}
 }
 
