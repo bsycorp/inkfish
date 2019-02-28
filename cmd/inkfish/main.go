@@ -4,8 +4,10 @@ import (
 	"flag"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/bsycorp/inkfish"
+	"github.com/syntaqx/go-metrics-datadog"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,7 @@ func main() {
 	caKey := flag.String("cakey", "ca.key.pem", "path to CA key file")
 	metadataFrom := flag.String("metadata", "aws", "default metadata provider (aws,none)")
 	addr := flag.String("addr", ":8080", "proxy listen address")
+	metrics := flag.String("metrics", "none", "metrics provider (none,datadog,prometheus)")
 
 	flag.Parse()
 
@@ -28,6 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal("config error: ", err)
 	}
+	// Metadata
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
@@ -40,10 +44,31 @@ func main() {
 		go func() {
 			for {
 				inkfish.UpdateMetadataFromAWS(sess, metadataCache)
-				time.Sleep(time.Duration(10*time.Second))
+				time.Sleep(time.Duration(10 * time.Second))
 			}
 		}()
 	}
 	proxy.MetadataProvider = metadataCache
-	log.Fatal(http.ListenAndServe(*addr, proxy.Proxy))
+
+	// Metrics
+	if *metrics == "none" {
+		log.Println("metrics disabled")
+	} else if strings.HasPrefix(*metrics, "datadog") {
+		reporter, err := datadog.NewReporter(
+			nil,                 // Metrics registry, or nil for default
+			"127.0.0.1:8125", // DogStatsD UDP address
+			time.Second * 10,       // Update interval
+			datadog.UsePercentiles([]float64{0.25, 0.99}),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		reporter.Client.Namespace = "inkfish."
+		//reporter.Client.Tags = append(reporter.Client.Tags, "us-east-1a")
+		go reporter.Flush()
+	} else {
+		log.Fatal("unknown metrics provider: ", *metrics)
+	}
+
+	log.Fatal(http.ListenAndServe(*addr, proxy))
 }

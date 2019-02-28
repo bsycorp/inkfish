@@ -27,13 +27,19 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		panic(err)
 	}
-	io.WriteString(w, req.Form.Get("result"))
+	_, err := io.WriteString(w, req.Form.Get("result"))
+	if err != nil {
+		panic(err)
+	}
 }
 
 type ConstantHandler string
 
 func (h ConstantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, string(h))
+	_, err := io.WriteString(w, string(h))
+	if err != nil {
+		panic(err)
+	}
 }
 
 type HeaderHandler struct{}
@@ -63,10 +69,10 @@ func NewInsecureInkfish() (*Inkfish) {
 	r := NewInkfish(NewCertSigner(&StubCA))
 
 	// Allow CONNECT to any port, not just 443
-	r.ConnectFilter = connectFilterAllowAny
+	r.ConnectPolicy = connectFilterAllowAny
 
 	// Disable client's TLS validation so we can connect to the test server
-	r.Proxy.TLSClientConfig = &tls.Config{
+	r.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
 	return r
@@ -79,7 +85,7 @@ type InkfishTestServer struct {
 
 func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
 	testServer := &InkfishTestServer{}
-	testServer.Server = httptest.NewServer(proxy.Proxy)
+	testServer.Server = httptest.NewServer(proxy)
 	return testServer
 }
 
@@ -115,19 +121,33 @@ func get(client *http.Client, url string) (int, []byte, error) {
 	return resp.StatusCode, body, nil
 }
 
-func getExpect(t *testing.T, client *http.Client, url string, expectCode int, expectBody []byte) []byte {
+func expectResponse(t *testing.T, client *http.Client, url string, expectBody []byte) []byte {
 	t.Helper()
 	statusCode, body, err := get(client, url)
 	if err != nil {
 		t.Fatal("Can't fetch url", url, err)
 	}
-	if statusCode != expectCode {
+	if statusCode != 200 {
 		t.Error("Unexpected status code: ", statusCode)
 	}
 	if bytes.Compare(body, expectBody) != 0 {
 		t.Error("Unexpected result: ", string(body))
 	}
 	return body
+}
+
+func expectDenyFromPolicy(t *testing.T, client *http.Client, url string) {
+	t.Helper()
+	statusCode, body, err := get(client, url)
+	if err != nil {
+		t.Fatal("Can't fetch url", url, err)
+	}
+	if statusCode != 403 {
+		t.Error("Unexpected status code: ", statusCode)
+	}
+	if !strings.Contains(string(body), "URL denied by policy") {
+		t.Error("Unexpected response body: ", string(body))
+	}
 }
 
 func MustParseAcl(s string) Acl {
@@ -163,7 +183,7 @@ func (m *LocalHostIsMeMetadataProvider) Lookup(s string) (string, bool) {
 	if s == "127.0.0.1" {
 		return "me", true
 	}
-	return "INVALID", false
+	return "UNUSED", false
 }
 
 // -----
@@ -185,7 +205,7 @@ func TestConnectFilter(t *testing.T) {
 
 	client := s.Client(nil)
 
-	// How client libraries deal with "CONNECT denied" varies a fair bit.
+	// How client libraries deal with "CONNECT denied" varies a bit.
 	// The go client will *not* give you an HTTP response and therefore you
 	// cannot inspect the response code (403) or body of the proxy's
 	// response to the CONNECT request.
@@ -210,10 +230,10 @@ func TestAllowFooNotBar(t *testing.T) {
 
 	client := s.Client(nil)
 
-	getExpect(t, client, srv_plain.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectResponse(t, client, srv_plain.URL+"/foo", []byte("foo"))
+	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 }
 
 func TestAllowWithAuth(t *testing.T) {
@@ -234,48 +254,45 @@ func TestAllowWithAuth(t *testing.T) {
 
 	// Foo can access foo only
 	client := s.Client(url.UserPassword("foo", "foo"))
-	getExpect(t, client, srv_plain.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectResponse(t, client, srv_plain.URL+"/foo", []byte("foo"))
+	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 
 	// Bar can access bar only
 	client = s.Client(url.UserPassword("bar", "bar"))
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	fmt.Println("HERE0")
-	getExpect(t, client, srv_plain.URL+"/bar", 200, []byte("bar"))
-	fmt.Println("HERE1")
-	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
-	fmt.Println("HERE2")
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectResponse(t, client, srv_plain.URL+"/bar", []byte("bar"))
+	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 
 	// Baz gets nothing
 	client = s.Client(url.UserPassword("baz", "baz"))
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 
 	// Foo with wrong password gets nothing
 	client = s.Client(url.UserPassword("foo", "wrong"))
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 
 	// Foo with blank password gets nothing
 	client = s.Client(url.UserPassword("foo", ""))
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 
 	// Unauthenticated client gets nothing
 	client = s.Client(nil)
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 }
 
 func TestAnonymousAccess(t *testing.T) {
@@ -296,17 +313,17 @@ func TestAnonymousAccess(t *testing.T) {
 
 	// Foo can access foo only
 	client := s.Client(url.UserPassword("foo", "foo"))
-	getExpect(t, client, srv_plain.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_plain.URL+"/bar", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 403, []byte(AccessDenied))
+	expectResponse(t, client, srv_plain.URL+"/foo", []byte("foo"))
+	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/bar")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/bar")
 
 	// ANONYMOUS can access bar only
 	client = s.Client(nil)
-	getExpect(t, client, srv_plain.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_plain.URL+"/bar", 200, []byte("bar"))
-	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+	expectDenyFromPolicy(t, client, srv_plain.URL+"/foo")
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectResponse(t, client, srv_plain.URL+"/bar", []byte("bar"))
+	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 }
 
 
@@ -335,13 +352,13 @@ func TestMitmBypassByUser(t *testing.T) {
 	// to the server port for "foo", so if the request is allowed it must be
 	// because MITM was successfully bypassed.
 	client := s.Client(url.UserPassword("foo", "foo"))
-	getExpect(t, client, srv_https.URL+"/foo", 200, []byte("foo"))
-	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 
 	// User bar should be Acl'd as usual because they don't have bypass.
 	client = s.Client(url.UserPassword("bar", "bar"))
-	getExpect(t, client, srv_https.URL+"/foo", 403, []byte(AccessDenied))
-	getExpect(t, client, srv_https.URL+"/bar", 200, []byte("bar"))
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 }
 
 
@@ -351,7 +368,8 @@ func TestMultipleUserPasswords(t *testing.T) {
 
 func TestCustomHeaders(t *testing.T) {
 	// Verify that custom server headers make it through to the client.
-	// Also check that Accept-Encoding isn't being messed with.
+	// Also check that Accept-Encoding isn't being messed with, this was a
+	// problem we had with goproxy.
 	proxy := NewInsecureInkfish()
 	proxy.Passwd = passwdFooBarBaz
 	s := NewInkfishTest(proxy)

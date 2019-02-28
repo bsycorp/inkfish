@@ -100,13 +100,13 @@ func TestFromAuthenticated(t *testing.T) {
 
 	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
 	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
-	assert.False(t, aclConfig.permits(badUser, "GET", google_dot_com))
-	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", google_dot_com))
+	assert.False(t, aclConfig.permits(authFailUser, "GET", google_dot_com))
+	assert.False(t, aclConfig.permits(anonymousUser, "GET", google_dot_com))
 
 	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
 	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(badUser, "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(authFailUser, "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(anonymousUser, "GET", yahoo_dot_com))
 
 }
 
@@ -120,13 +120,13 @@ func TestFromANYONE(t *testing.T) {
 
 	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
 	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
-	assert.True(t, aclConfig.permits(badUser, "GET", google_dot_com))
-	assert.True(t, aclConfig.permits("ANONYMOUS", "GET", google_dot_com))
+	assert.True(t, aclConfig.permits(authFailUser, "GET", google_dot_com))
+	assert.True(t, aclConfig.permits(anonymousUser, "GET", google_dot_com))
 
 	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
 	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(badUser, "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits("ANONYMOUS", "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(authFailUser, "GET", yahoo_dot_com))
+	assert.False(t, aclConfig.permits(anonymousUser, "GET", yahoo_dot_com))
 }
 
 

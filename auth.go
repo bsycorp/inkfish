@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/pkg/errors"
+	"net"
 	"net/http"
-	"regexp"
 	"strings"
 )
 
@@ -27,21 +27,20 @@ func parseProxyAuth(headerValue string) (string, string, error) {
 	return userpass[0], userpass[1], nil
 }
 
-var srcRe = regexp.MustCompile(`^(.*):(\d+)$`)
-
 func getRemoteIP(remoteAddr string) (string, error) {
 	// We can't split by ":" because the source IP might be a v6 address.
 	// Most commonly, this would be because the source is "localhost".
 	// RemoteAddr will look like "[::]:31337" in this case.
-
-	m := srcRe.FindStringSubmatch(remoteAddr)
-	if m == nil || len(m) != 3 {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
 		return "", errors.Errorf("failed to get remote address from addr: %v", remoteAddr)
 	}
-	return m[1], nil
+	host = strings.Split(host, "%")[0]
+	return host, nil
 }
 
-const badUser = "INVALID"
+const authFailUser = "AUTH_FAIL"
+const anonymousUser = "ANONYMOUS"
 
 func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 	ip, err := getRemoteIP(req.RemoteAddr)
@@ -52,17 +51,16 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 	if _, hasAuthHdr := req.Header[ProxyAuthorizationHeader]; hasAuthHdr {
 		authHdr := req.Header[ProxyAuthorizationHeader]
 		if len(authHdr) != 1 {
-			return badUser, errors.New("denying request due to multiple proxy-auth headers")
+			return authFailUser, errors.New("denying request due to multiple proxy-auth headers")
 		}
 		hdrUser, hdrPass, err := parseProxyAuth(authHdr[0])
 		if err != nil {
-			// log.Println("|" + authHdr[0] + "|")
-			return badUser, errors.Wrap(err, "could not understand proxy-auth header ")
+			return authFailUser, errors.Wrap(err, "could not understand proxy-auth header ")
 		}
 		if proxy.credentialsAreValid(hdrUser, hdrPass) {
 			return "user:" + hdrUser, nil
 		}
-		return badUser, errors.New("authentication failed")
+		return authFailUser, errors.New("authentication failed")
 	}
 	// Fall back on metadata lookup
 	if proxy.MetadataProvider != nil {
@@ -71,5 +69,5 @@ func (proxy *Inkfish) authenticateClient(req *http.Request) (string, error) {
 		}
 	}
 	// No creds and no metadata, client is anonymous
-	return "ANONYMOUS", nil
+	return anonymousUser, nil
 }
