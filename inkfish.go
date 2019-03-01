@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
+	"internal/poll"
 	"io"
 	"io/ioutil"
 	"log"
@@ -24,6 +25,8 @@ import (
 	"strings"
 	"time"
 )
+
+
 
 type Metrics struct {
 	Registry         metrics.Registry
@@ -422,7 +425,10 @@ func (proxy *Inkfish) transfer(destination io.WriteCloser, source io.ReadCloser)
 	defer destination.Close()
 	defer source.Close()
 	_, err := io.Copy(destination, source)
-	if err != nil {
+	// We're running transfers in both directions concurrently. It can happen that
+	// one side falls out of the transfer loop and sister goroutine is still trying
+	// to copy. This is common enough that we just ignore the error.
+	if err != nil && err != poll.ErrNetClosing {
 		proxy.Metrics.OtherErrors.Inc(1)
 		log.Println("transfer error:", err)
 	}
