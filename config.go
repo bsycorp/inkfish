@@ -24,6 +24,7 @@ type AclEntry struct {
 	AllMethods bool
 	Methods    []string
 	Pattern    *regexp.Regexp
+	Quiet      bool
 }
 
 type UserEntry struct {
@@ -41,14 +42,14 @@ func listContainsString(haystack []string, needle string) bool {
 	return false
 }
 
-func (c *Inkfish) permitsRequest(from, method, url string) bool {
+func (c *Inkfish) findAclEntryThatAllowsRequest(from, method, url string) *AclEntry {
 	// Check each acl in the config to see if it permits the request
 	for _, aclConfig := range c.Acls {
-		if aclConfig.permits(from, method, url) {
-			return true
+		if aclEntry := aclConfig.findAclEntryThatAllowsRequest(from, method, url); aclEntry != nil {
+			return aclEntry
 		}
 	}
-	return false
+	return nil
 }
 
 func (c *Inkfish) bypassMitm(from, hostAndPort string) bool {
@@ -94,22 +95,22 @@ func (c *Acl) applies(from string) bool {
 	return listContainsString(c.From, from)
 }
 
-func (c *Acl) permits(from, method, url string) bool {
-	// Check whether an acl permits a request.
+func (c *Acl) findAclEntryThatAllowsRequest(from, method, url string) *AclEntry {
+	// Check whether an acl permits a request. If so, return the entry that permitted the request.
 	// 1) The Acl must apply to the requesting user
 	// 2) The request method and url must match one of the Acl entries
 
 	if !c.applies(from) {
-		return false
+		return nil
 	}
 	for _, e := range c.Entries {
 		if e.AllMethods || listContainsString(e.Methods, method) {
 			if e.Pattern.MatchString(url) {
-				return true
+				return &e
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 func (c *Acl) bypassMitm(from, hostAndPort string) bool {
@@ -124,11 +125,24 @@ func (c *Acl) bypassMitm(from, hostAndPort string) bool {
 	return false
 }
 
+func popModifiers(aclUrl *AclEntry, words *[]string) {
+	// Take an ACL line and process any modifiers (currently, just "quiet")
+	n := len(*words)
+	if n == 0 {
+		return
+	}
+	if (*words)[n-1] == "quiet" {
+		aclUrl.Quiet = true
+		*words = (*words)[:n-1]
+	}
+}
+
 func parseAclURLEntry(words []string) (*AclEntry, error) {
-	// Take a config line like ["url", "GET", ""] and turn it into an AclEntry
+	// Take a config line like ["url", "GET", "<regexp>"] and turn it into an AclEntry
 	var aclUrl AclEntry
-	if len(words) != 2 && len(words) != 3 {
-		return nil, errors.New("wrong number of fields (expecting 2 or 3)")
+	popModifiers(&aclUrl, &words)
+	if len(words) < 2 || len(words) > 3 {
+		return nil, errors.New("wrong number of fields")
 	}
 	if words[0] != "url" {
 		return nil, errors.New("expecting entry to start with 'url'")
@@ -146,7 +160,7 @@ func parseAclURLEntry(words []string) (*AclEntry, error) {
 	}
 	re, err := regexp.Compile(urlPattern)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse url pattern")
+		return nil, errors.Wrap(err, "failed to parse acl entry, bad url pattern")
 	}
 	aclUrl.Pattern = re
 	return &aclUrl, nil
@@ -155,8 +169,9 @@ func parseAclURLEntry(words []string) (*AclEntry, error) {
 func parseAclS3BucketEntry(words []string) (*AclEntry, error) {
 	// Take a config line like ["bucket", "s3-bucket-name"] and turn it into an AclEntry
 	var aclUrl AclEntry
+	popModifiers(&aclUrl, &words)
 	if len(words) != 2 {
-		return nil, errors.New("wrong number of fields (expecting 2)")
+		return nil, errors.New("wrong number of fields")
 	}
 	if words[0] != "s3" {
 		return nil, errors.New("expecting entry to start with 's3'")

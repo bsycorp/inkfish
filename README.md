@@ -58,8 +58,9 @@ be allowed through the proxy. The general format looks like:
 ```
 from <user> [user2 user3...]
 from ...
-url [METHOD,METHOD2] <url-regex>
+url [METHOD,METHOD2] <url-regex> [modifiers]
 url ...
+s3 <bucket-name> [modifiers]
 bypass <host-port-regex>
 bypass ...
 ```
@@ -98,6 +99,10 @@ There is also a shorthand for a `url` regex that includes all AWS S3 URL notatio
  (bucket in path and bucket in host) across all regions
 
 * `s3 my-super-bucket`
+
+Modifiers alter the processing of a particular ACL. Currently supported modifiers are:
+
+* `quiet` - Suppresses logging of successful requests for the URL pattern or S3 bucket.
 
 ## Metadata lookup
 

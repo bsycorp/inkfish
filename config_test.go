@@ -2,6 +2,7 @@ package inkfish
 
 import (
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 	"regexp"
 )
@@ -52,6 +53,24 @@ func TestParseAclUrl(t *testing.T) {
 	assert.Equal(t, url, aclUrl.Pattern.String())
 }
 
+func TestParseAclUrlQuiet(t *testing.T) {
+	aclUrl, err := parseAclURLEntry(strings.Fields("url http://foo.com/"))
+	assert.Nil(t, err)
+	assert.False(t, aclUrl.Quiet)
+
+	aclUrl, err = parseAclURLEntry(strings.Fields("url http://foo.com/ quiet"))
+	assert.Nil(t, err)
+	assert.True(t, aclUrl.Quiet)
+
+	aclUrl, err = parseAclS3BucketEntry(strings.Fields("s3 fantastic-bucket"))
+	assert.Nil(t, err)
+	assert.False(t, aclUrl.Quiet)
+
+	aclUrl, err = parseAclS3BucketEntry(strings.Fields("s3 fantastic-bucket quiet"))
+	assert.Nil(t, err)
+	assert.True(t, aclUrl.Quiet)
+}
+
 func TestParseAclS3Bucket(t *testing.T) {
 	aclUrl, err := parseAclS3BucketEntry([]string{})
 	assert.Nil(t, aclUrl)
@@ -98,15 +117,15 @@ func TestFromAuthenticated(t *testing.T) {
 	assert.NotNil(t, aclConfig)
 	assert.Nil(t, err)
 
-	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
-	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
-	assert.False(t, aclConfig.permits(authFailUser, "GET", google_dot_com))
-	assert.False(t, aclConfig.permits(anonymousUser, "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("tag:my-cool-tag", "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("user:somebody", "GET", google_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(authFailUser, "GET", google_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(anonymousUser, "GET", google_dot_com))
 
-	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(authFailUser, "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(anonymousUser, "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("tag:my-cool-tag", "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("user:somebody", "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(authFailUser, "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(anonymousUser, "GET", yahoo_dot_com))
 
 }
 
@@ -118,15 +137,15 @@ func TestFromANYONE(t *testing.T) {
 	assert.NotNil(t, aclConfig)
 	assert.Nil(t, err)
 
-	assert.True(t, aclConfig.permits("tag:my-cool-tag", "GET", google_dot_com))
-	assert.True(t, aclConfig.permits("user:somebody", "GET", google_dot_com))
-	assert.True(t, aclConfig.permits(authFailUser, "GET", google_dot_com))
-	assert.True(t, aclConfig.permits(anonymousUser, "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("tag:my-cool-tag", "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("user:somebody", "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest(authFailUser, "GET", google_dot_com))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest(anonymousUser, "GET", google_dot_com))
 
-	assert.False(t, aclConfig.permits("tag:my-cool-tag", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits("user:somebody", "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(authFailUser, "GET", yahoo_dot_com))
-	assert.False(t, aclConfig.permits(anonymousUser, "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("tag:my-cool-tag", "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("user:somebody", "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(authFailUser, "GET", yahoo_dot_com))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(anonymousUser, "GET", yahoo_dot_com))
 }
 
 
@@ -157,11 +176,11 @@ func TestAclConfig(t *testing.T) {
 	assert.NotNil(t, aclConfig)
 	assert.Nil(t, err)
 
-	assert.True(t, aclConfig.permits("foo", "GET", "https://google.com/"))
-	assert.True(t, aclConfig.permits("bar", "GET", "https://google.com/"))
-	assert.False(t, aclConfig.permits("baz", "GET", "https://google.com/"))
-	assert.True(t, aclConfig.permits("foo", "GET", "https://yahoo.com/"))
-	assert.False(t, aclConfig.permits("foo", "POST", "https://yahoo.com/"))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("foo", "GET", "https://google.com/"))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("bar", "GET", "https://google.com/"))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("baz", "GET", "https://google.com/"))
+	assert.NotNil(t, aclConfig.findAclEntryThatAllowsRequest("foo", "GET", "https://yahoo.com/"))
+	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest("foo", "POST", "https://yahoo.com/"))
 }
 
 func TestAclConfigWithBypass(t *testing.T) {

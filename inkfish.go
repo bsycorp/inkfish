@@ -270,18 +270,20 @@ func (proxy *Inkfish) filterRequest(connectReq *http.Request, scheme string, w h
 		}
 	}
 
-	aclUrl := *req.URL
-	aclUrl.Scheme = scheme
-	aclUrl.Host = req.Host
+	u := *req.URL
+	u.Scheme = scheme
+	u.Host = req.Host
 
-	if proxy.permitsRequest(user, req.Method, aclUrl.String()) {
-		proxy.logRequest(RequestLogEntry{
-			RemoteAddr: req.RemoteAddr,
-			User:       user,
-			Method:     req.Method,
-			Url:        aclUrl,
-			Result:     "ALLOW",
-		})
+	if aclEntry := proxy.findAclEntryThatAllowsRequest(user, req.Method, u.String()); aclEntry != nil {
+		if !aclEntry.Quiet {
+			proxy.logRequest(RequestLogEntry{
+				RemoteAddr: req.RemoteAddr,
+				User:       user,
+				Method:     req.Method,
+				Url:        u,
+				Result:     "ALLOW",
+			})
+		}
 		proxy.Metrics.AcceptedRequests.Inc(1)
 		return true
 	} else {
@@ -289,12 +291,12 @@ func (proxy *Inkfish) filterRequest(connectReq *http.Request, scheme string, w h
 			RemoteAddr: req.RemoteAddr,
 			User:       user,
 			Method:     req.Method,
-			Url:        aclUrl,
+			Url:        u,
 			Result:     "DENY",
 			Reason:     "URL denied by policy",
 		})
 		proxy.Metrics.DeniedRequests.Inc(1)
-		errMsg := fmt.Sprintf("URL denied by policy: %s", sanitiseURL(aclUrl))
+		errMsg := fmt.Sprintf("URL denied by policy: %s", sanitiseURL(u))
 		proxy.sendAccessDenied(w, errMsg)
 		return false
 	}
