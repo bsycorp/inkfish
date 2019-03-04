@@ -425,7 +425,7 @@ func (proxy *Inkfish) transfer(destination io.WriteCloser, source io.ReadCloser)
 	// We're running transfers in both directions concurrently. It can happen that
 	// one side falls out of the transfer loop and sister goroutine is still trying
 	// to copy. This is common enough that we just ignore the error.
-	if err != nil && err.Error() != "use of closed network connection" {
+	if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 		proxy.Metrics.OtherErrors.Inc(1)
 		log.Println("transfer error:", err)
 	}
