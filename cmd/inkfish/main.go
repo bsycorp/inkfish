@@ -69,6 +69,7 @@ func main() {
 	} else {
 		log.Fatal("unknown metrics provider: ", *metrics)
 	}
+	proxy.Metrics.StartCapture()
 
 	log.Fatal(http.ListenAndServe(*addr, proxy))
 }
