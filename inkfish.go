@@ -102,8 +102,8 @@ func (m *Metrics) Init() {
 }
 
 func (m *Metrics) StartCapture() {
-	go metrics.CaptureDebugGCStats(m.Registry, time.Second*5)
-	go metrics.CaptureRuntimeMemStats(m.Registry, time.Second*5)
+	go metrics.CaptureRuntimeMemStats(m.Registry, time.Second*10)
+	// go metrics.CaptureDebugGCStats(m.Registry, time.Second*10)
 }
 
 func (proxy *Inkfish) requestHandler(connectReq *http.Request, scheme string, upstream http.Handler) http.Handler {

@@ -54,10 +54,15 @@ func main() {
 	if *metrics == "none" {
 		log.Println("metrics disabled")
 	} else if strings.HasPrefix(*metrics, "datadog") {
+		dogStatsdAddr := "127.0.0.1:8125"
+		bits := strings.Split(*metrics, ",")
+		if len(bits) > 1 {
+			dogStatsdAddr = bits[1]
+		}
 		reporter, err := datadog.NewReporter(
-			nil,                 // Metrics registry, or nil for default
-			"127.0.0.1:8125", // DogStatsD UDP address
-			time.Second * 10,       // Update interval
+			proxy.Metrics.Registry, // Metrics registry, or nil for default
+			dogStatsdAddr,          // DogStatsD UDP address
+			time.Second*10,         // Update interval
 			datadog.UsePercentiles([]float64{0.25, 0.99}),
 		)
 		if err != nil {
