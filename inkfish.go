@@ -91,14 +91,14 @@ func (m *Metrics) Init() {
 	m.CertgenErrors = metrics.NewCounter()
 	m.OtherErrors = metrics.NewCounter()
 
-	_ = metrics.Register("connect.mitm.count", m.MitmConnects)
-	_ = metrics.Register("connect.bypass.count", m.BypassConnects)
-	_ = metrics.Register("connect.denied.count", m.DeniedConnects)
-	_ = metrics.Register("request.accepted.count", m.AcceptedRequests)
-	_ = metrics.Register("request.denied.count", m.DeniedRequests)
-	_ = metrics.Register("errors.handshake.count", m.HandshakeErrors)
-	_ = metrics.Register("errors.certgen.count", m.CertgenErrors)
-	_ = metrics.Register("errors.other.count", m.OtherErrors)
+	_ = m.Registry.Register("connect.mitm.count", m.MitmConnects)
+	_ = m.Registry.Register("connect.bypass.count", m.BypassConnects)
+	_ = m.Registry.Register("connect.denied.count", m.DeniedConnects)
+	_ = m.Registry.Register("request.accepted.count", m.AcceptedRequests)
+	_ = m.Registry.Register("request.denied.count", m.DeniedRequests)
+	_ = m.Registry.Register("errors.handshake.count", m.HandshakeErrors)
+	_ = m.Registry.Register("errors.certgen.count", m.CertgenErrors)
+	_ = m.Registry.Register("errors.other.count", m.OtherErrors)
 }
 
 func (m *Metrics) StartCapture() {
