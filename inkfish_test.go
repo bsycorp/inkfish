@@ -399,3 +399,19 @@ func TestCustomHeaders(t *testing.T) {
 	assert.Equal(t, "SomethingWeird", resp.Header.Get("X-Reflect-Content-Type"))
 	assert.Equal(t, "MagicValue", resp.Header.Get("X-Reflect-Accept-Encoding"))
 }
+
+func TestTestMode(t *testing.T) {
+	proxy := NewInsecureInkfish()
+
+	s := NewInkfishTest(proxy)
+	defer s.Close()
+
+	// There are no ACLs so this should be denied
+	client := s.Client(nil)
+	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
+
+	// The proxy is in test mode now so this request should succeed
+	proxy.InsecureTestMode = true
+	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+}
+

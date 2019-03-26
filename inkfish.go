@@ -63,6 +63,9 @@ type Inkfish struct {
 
 	// Metrics! Metrics!
 	Metrics Metrics
+
+	// Enable test mode (disables blocking of requests!)
+	InsecureTestMode bool
 }
 
 func NewInkfish(signer *CertSigner) *Inkfish {
@@ -297,8 +300,12 @@ func (proxy *Inkfish) filterRequest(connectReq *http.Request, scheme string, w h
 		})
 		proxy.Metrics.DeniedRequests.Inc(1)
 		errMsg := fmt.Sprintf("URL denied by policy: %s", sanitiseURL(u))
-		proxy.sendAccessDenied(w, errMsg)
-		return false
+		if proxy.InsecureTestMode {
+			return true
+		} else {
+			proxy.sendAccessDenied(w, errMsg)
+			return false
+		}
 	}
 }
 
