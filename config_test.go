@@ -86,7 +86,7 @@ func TestParseAclS3Bucket(t *testing.T) {
 	assert.NotNil(t, err)
 
 	bucket := "my-bucket"
-	expectedExpr := `https?\:\/\/(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/my-bucket|https?\:\/\/my-bucket\.(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/`
+	expectedExpr := `https?\:\/\/(s3[-.][a-z0-9\-]+|s3)\.amazonaws\.com\/my-bucket|https?\:\/\/my-bucket\.(s3[-.][a-z0-9\-]+|s3)\.amazonaws\.com\/`
 	aclUrl, err = parseAclS3BucketEntry([]string{"s3", bucket})
 	assert.NotNil(t, aclUrl)
 	assert.Nil(t, err)
@@ -100,6 +100,7 @@ func TestParseAclS3Bucket(t *testing.T) {
 	assert.True(t, re.Match([]byte("https://s3-somewhere.amazonaws.com/my-bucket/woot")))
 	assert.True(t, re.Match([]byte("http://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
 	assert.True(t, re.Match([]byte("https://my-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
+	assert.True(t, re.Match([]byte("https://my-bucket.s3.ap-southeast-2.amazonaws.com/woot")))
 	assert.False(t, re.Match([]byte("https://evil-bucket.s3-ap-southeast-2.amazonaws.com/woot")))
 	assert.False(t, re.Match([]byte("https://s3.amazonaws.com/evil-bucket/woot")))
 	assert.False(t, re.Match([]byte("https://evil.host/s3.amazonaws.com/evil-bucket/woot")))

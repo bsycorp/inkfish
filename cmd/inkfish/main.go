@@ -19,6 +19,7 @@ func main() {
 	metadataFrom := flag.String("metadata", "aws", "default metadata provider (aws,none)")
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	metrics := flag.String("metrics", "none", "metrics provider (none,datadog,prometheus)")
+	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 
 	flag.Parse()
 
@@ -31,6 +32,12 @@ func main() {
 	if err != nil {
 		log.Fatal("config error: ", err)
 	}
+	// Testmode
+	if *insecureTestMode {
+		log.Println("WARNING: PROXY IS IN TEST MODE, REQUESTS WILL NOT BE BLOCKED")
+		proxy.InsecureTestMode = true
+	}
+
 	// Metadata
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
