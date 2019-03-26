@@ -180,7 +180,16 @@ func parseAclS3BucketEntry(words []string) (*AclEntry, error) {
 	if !validBucket || bucketErr != nil {
 		return nil, errors.New("invalid s3 bucket name")
 	}
-	s3UrlPattern := `https?\:\/\/(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/%[1]s|https?\:\/\/%[1]s\.(s3\-[a-z0-9\-]+|s3)\.amazonaws\.com\/`
+	//
+	// See: https://docs.aws.amazon.com/general/latest/gr/rande.html
+	// 26 March 2019:
+	// -> s3.ap-southeast-2.amazonaws.com [SUPPORTED]
+	// -> s3-ap-southeast-2.amazonaws.com [SUPPORTED]
+	// -> s3.dualstack.ap-southeast-2.amazonaws.com [NOT SUPPORTED]
+	// -> account-id.s3-control.ap-southeast-2.amazonaws.com [NOT SUPPORTED]
+	// -> account-id.s3-control.dualstack.ap-southeast-2.amazonaws.com [NOT SUPPORTED]
+	//
+	s3UrlPattern := `https?\:\/\/(s3[-.][a-z0-9\-]+|s3)\.amazonaws\.com\/%[1]s|https?\:\/\/%[1]s\.(s3[-.][a-z0-9\-]+|s3)\.amazonaws\.com\/`
 	urlPattern := fmt.Sprintf(s3UrlPattern, words[1])
 
 	aclUrl.AllMethods = true
