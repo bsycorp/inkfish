@@ -25,13 +25,13 @@ const maxCertificateLifetimeDays = 84
 const rsaKeyBits = 2048
 
 type CertSigner struct {
-	CA *tls.Certificate
-	TlsConfig *tls.Config
-	CertCache map[string]tls.Certificate
+	CA             *tls.Certificate
+	TlsConfig      *tls.Config
+	CertCache      map[string]tls.Certificate
 	CertCacheMutex *sync.Mutex
 }
 
-func NewCertSigner(ca *tls.Certificate) (*CertSigner) {
+func NewCertSigner(ca *tls.Certificate) *CertSigner {
 	signer := CertSigner{}
 	signer.CA = ca
 	signer.TlsConfig = &tls.Config{

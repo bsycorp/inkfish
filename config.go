@@ -42,9 +42,9 @@ func listContainsString(haystack []string, needle string) bool {
 	return false
 }
 
-func (c *Inkfish) findAclEntryThatAllowsRequest(from, method, url string) *AclEntry {
+func (proxy *Inkfish) findAclEntryThatAllowsRequest(from, method, url string) *AclEntry {
 	// Check each acl in the config to see if it permits the request
-	for _, aclConfig := range c.Acls {
+	for _, aclConfig := range proxy.Acls {
 		if aclEntry := aclConfig.findAclEntryThatAllowsRequest(from, method, url); aclEntry != nil {
 			return aclEntry
 		}
@@ -52,8 +52,8 @@ func (c *Inkfish) findAclEntryThatAllowsRequest(from, method, url string) *AclEn
 	return nil
 }
 
-func (c *Inkfish) bypassMitm(from, hostAndPort string) bool {
-	for _, aclConfig := range c.Acls {
+func (proxy *Inkfish) bypassMitm(from, hostAndPort string) bool {
+	for _, aclConfig := range proxy.Acls {
 		if aclConfig.bypassMitm(from, hostAndPort) {
 			return true
 		}
@@ -61,10 +61,10 @@ func (c *Inkfish) bypassMitm(from, hostAndPort string) bool {
 	return false
 }
 
-func (c *Inkfish) credentialsAreValid(user, password string) bool {
+func (proxy *Inkfish) credentialsAreValid(user, password string) bool {
 	// Check each UserEntry to see if it matches the provided credentials
 	hashedPw := sha256.Sum256([]byte(password))
-	for _, ent := range c.Passwd {
+	for _, ent := range proxy.Passwd {
 		if ent.Username == user {
 			// It's possible to have multiple passwords for the same user,
 			// this allows blue/green credentials. Otherwise we could early-exit.

@@ -19,6 +19,10 @@ func main() {
 	metadataFrom := flag.String("metadata", "aws", "default metadata provider (aws,none)")
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	metrics := flag.String("metrics", "none", "metrics provider (none,datadog,prometheus)")
+	clientReadTimeout := flag.Int("client-read-timeout", 0, "client read timeout")
+	clientWriteTimeout := flag.Int("client-write-timeout", 0, "client write timeout")
+	clientIdleTimeout := flag.Int("client-idle-timeout", 300, "client idle timeout")
+	metadataUpdateEvery := flag.Int("metadata-update-every", 10, "metadata update interval")
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 
 	flag.Parse()
@@ -39,6 +43,7 @@ func main() {
 	}
 
 	// Metadata
+	log.Println("metadata update interval: ", metadataUpdateEvery)
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
@@ -51,7 +56,7 @@ func main() {
 		go func() {
 			for {
 				inkfish.UpdateMetadataFromAWS(sess, metadataCache)
-				time.Sleep(time.Duration(10 * time.Second))
+				time.Sleep(time.Duration(*metadataUpdateEvery) * time.Second)
 			}
 		}()
 	}
@@ -78,10 +83,22 @@ func main() {
 		reporter.Client.Namespace = "inkfish."
 		//reporter.Client.Tags = append(reporter.Client.Tags, "us-east-1a")
 		go reporter.Flush()
+		log.Println("metrics to datadogstatsd at: ", dogStatsdAddr)
 	} else {
 		log.Fatal("unknown metrics provider: ", *metrics)
 	}
 	proxy.Metrics.StartCapture()
 
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	log.Println("clientReadTimeout: ", *clientReadTimeout)
+	log.Println("clientWriteTimeout: ", *clientWriteTimeout)
+	log.Println("clientIdleTimeout: ", *clientIdleTimeout)
+
+	srv := &http.Server{
+		Addr:         *addr,
+		ReadTimeout:  time.Duration(*clientReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(*clientWriteTimeout) * time.Second,
+		IdleTimeout:  time.Duration(*clientIdleTimeout) * time.Second,
+		Handler:      proxy,
+	}
+	log.Fatal(srv.ListenAndServe())
 }
