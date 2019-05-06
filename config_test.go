@@ -2,9 +2,9 @@ package inkfish
 
 import (
 	"github.com/stretchr/testify/assert"
+	"regexp"
 	"strings"
 	"testing"
-	"regexp"
 )
 
 func TestCheckCredentials(t *testing.T) {
@@ -148,7 +148,6 @@ func TestFromANYONE(t *testing.T) {
 	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(authFailUser, "GET", yahoo_dot_com))
 	assert.Nil(t, aclConfig.findAclEntryThatAllowsRequest(anonymousUser, "GET", yahoo_dot_com))
 }
-
 
 func TestBrokenAclConfigs(t *testing.T) {
 	aclConfig, err := parseAcl([]string{

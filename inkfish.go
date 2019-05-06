@@ -82,7 +82,6 @@ func NewInkfish(signer *CertSigner) *Inkfish {
 func (m *Metrics) Init() {
 	m.Registry = metrics.NewRegistry()
 
-	metrics.RegisterDebugGCStats(m.Registry)
 	metrics.RegisterRuntimeMemStats(m.Registry)
 
 	m.MitmConnects = metrics.NewCounter()
@@ -422,6 +421,10 @@ func (proxy *Inkfish) bypassConnect(w http.ResponseWriter, r *http.Request) {
 		proxy.Metrics.OtherErrors.Inc(1)
 		log.Println("error performing hijack in bypass:", r.Host, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	if err = clientConn.SetDeadline(time.Time{}); err != nil {
+		log.Println("error clearing connection timeouts:", err)
 	}
 	go proxy.transfer(destConn, clientConn)
 	go proxy.transfer(clientConn, destConn)

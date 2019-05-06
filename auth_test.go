@@ -34,7 +34,7 @@ func TestParseProxyAuth(t *testing.T) {
 	// TODO
 }
 
-func MustParseUrl(s string) (*url.URL) {
+func MustParseUrl(s string) *url.URL {
 	u, err := url.Parse(s)
 	if err != nil {
 		panic(err)
@@ -42,18 +42,18 @@ func MustParseUrl(s string) (*url.URL) {
 	return u
 }
 
-func templateHttpRequest() (*http.Request) {
+func templateHttpRequest() *http.Request {
 	return &http.Request{
-		Method: "GET",
-		URL: MustParseUrl("http://google.com/"),
-		Proto: "HTTP/1.1",
+		Method:     "GET",
+		URL:        MustParseUrl("http://google.com/"),
+		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header: map[string][]string{
 			"Accept-Encoding": {"gzip, deflate"},
 			"Accept-Language": {"en-us"},
 		},
-		Host: "www.google.com",
+		Host:       "www.google.com",
 		RemoteAddr: "127.0.0.1:1234",
 	}
 }
@@ -63,7 +63,7 @@ func TestAuthenticateClientByValidCreds(t *testing.T) {
 	// the calling user should be taken from the header
 	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.Passwd = []UserEntry{ // foo:foo
-		{ Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae" },
+		{Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"},
 	}
 	req := templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmZvbw==")
@@ -77,7 +77,7 @@ func TestAuthenticateClientByInvalidCreds(t *testing.T) {
 	// are not valid, the calling user should be authFailUser
 	proxy := NewInkfish(NewCertSigner(&StubCA))
 	proxy.Passwd = []UserEntry{ // foo:foo
-		{ Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae" },
+		{Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"},
 	}
 	req := templateHttpRequest()
 	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmJhcg==")
@@ -108,7 +108,7 @@ func TestAuthenticateClientAnonymous(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-type testMetadataProvider struct {}
+type testMetadataProvider struct{}
 
 func (m *testMetadataProvider) Lookup(s string) (string, bool) {
 	if s == "155.144.114.41" {

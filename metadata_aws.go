@@ -13,7 +13,7 @@ import (
 var arnToIP = map[string]string{}
 
 func UpdateMetadataFromAWS(sess *session.Session, cache *MetadataCache) {
-	ipToTag, err := GetMetadataMap(sess,"ProxyUser")
+	ipToTag, err := GetMetadataMap(sess, "ProxyUser")
 	if err != nil {
 		log.Println("failed to read aws metadata: ", err)
 	} else {

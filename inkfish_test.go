@@ -49,7 +49,7 @@ func (HeaderHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for k := range req.Header {
 		vals := req.Header[k]
 		for i := range vals {
-			w.Header().Set("X-Reflect-" + k, vals[i])
+			w.Header().Set("X-Reflect-"+k, vals[i])
 		}
 	}
 }
@@ -65,7 +65,7 @@ func init() {
 // PROXY TEST HARNESS
 // -------------------
 
-func NewInsecureInkfish() (*Inkfish) {
+func NewInsecureInkfish() *Inkfish {
 	r := NewInkfish(NewCertSigner(&StubCA))
 
 	// Allow CONNECT to any port, not just 443
@@ -83,14 +83,14 @@ type InkfishTestServer struct {
 	Server *httptest.Server
 }
 
-func NewInkfishTest(proxy *Inkfish) (*InkfishTestServer) {
+func NewInkfishTest(proxy *Inkfish) *InkfishTestServer {
 	testServer := &InkfishTestServer{}
 	testServer.Server = httptest.NewServer(proxy)
 	return testServer
 }
 
 // Make an HTTP client for the server, optionally with creds
-func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
+func (it *InkfishTestServer) Client(userInfo *url.Userinfo) *http.Client {
 	proxyUrl, _ := url.Parse(it.Server.URL)
 	proxyUrl.User = userInfo
 	acceptAllCerts := &tls.Config{
@@ -99,7 +99,7 @@ func (it *InkfishTestServer) Client(userInfo *url.Userinfo) (*http.Client) {
 	}
 	tr := &http.Transport{
 		TLSClientConfig: acceptAllCerts,
-		Proxy: http.ProxyURL(proxyUrl),
+		Proxy:           http.ProxyURL(proxyUrl),
 	}
 	return &http.Client{Transport: tr}
 }
@@ -177,7 +177,7 @@ func connectFilterAllowAny(string, int) bool {
 	return true
 }
 
-type LocalHostIsMeMetadataProvider struct {}
+type LocalHostIsMeMetadataProvider struct{}
 
 func (m *LocalHostIsMeMetadataProvider) Lookup(s string) (string, bool) {
 	if s == "127.0.0.1" {
@@ -326,7 +326,6 @@ func TestAnonymousAccess(t *testing.T) {
 	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 }
 
-
 func TestMitmBypassByUser(t *testing.T) {
 	proxy := NewInsecureInkfish()
 	proxy.Passwd = passwdFooBarBaz
@@ -346,7 +345,7 @@ func TestMitmBypassByUser(t *testing.T) {
 		from user:bar
 		url ^.*/bar$
 	`)
-	proxy.Acls = []Acl{acl1,acl2}
+	proxy.Acls = []Acl{acl1, acl2}
 
 	// This test relies on there being no ACL to allow requests
 	// to the server port for "foo", so if the request is allowed it must be
@@ -360,7 +359,6 @@ func TestMitmBypassByUser(t *testing.T) {
 	expectDenyFromPolicy(t, client, srv_https.URL+"/foo")
 	expectResponse(t, client, srv_https.URL+"/bar", []byte("bar"))
 }
-
 
 func TestMultipleUserPasswords(t *testing.T) {
 	// TODO: test that the same user with multiple passwords set, works
@@ -381,7 +379,7 @@ func TestCustomHeaders(t *testing.T) {
 	proxy.Acls = []Acl{acl}
 	client := s.Client(url.UserPassword("foo", "foo"))
 
-	headerTestUrl := srv_https.URL+"/header"
+	headerTestUrl := srv_https.URL + "/header"
 	req, err := http.NewRequest("GET", headerTestUrl, nil)
 	assert.Nil(t, err)
 
@@ -414,4 +412,3 @@ func TestTestMode(t *testing.T) {
 	proxy.InsecureTestMode = true
 	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
 }
-
