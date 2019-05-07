@@ -142,3 +142,38 @@ func TestAuthenticateClientByMetadata(t *testing.T) {
 	assert.Equal(t, anonymousUser, res)
 	assert.Nil(t, err)
 }
+
+func TestCredsPrecedenceOverMetadata(t *testing.T) {
+	// If our metadata says we are "tag:bojangles" but we supplied
+	// a valid proxy-auth header as "user:foo", then the creds should
+	// take precedence.
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	proxy.MetadataProvider = &testMetadataProvider{}
+	proxy.Passwd = []UserEntry{ // foo:foo
+		{Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"},
+	}
+	req := templateHttpRequest()
+	req.Header.Add("Proxy-Authorization", "Basic Zm9vOmZvbw==") // foo:foo
+	req.RemoteAddr = "155.144.114.41:31337"
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, "user:foo", res)
+	assert.Nil(t, err)
+}
+
+func TestNoCredsToMetadataFallback(t *testing.T) {
+	// If our metadata says we are "tag:bojangles" but we supplied
+	// an invalid proxy-auth header for "user:foo", then the result of
+	// authentication should be invalidUser; i.e, there is no fallback
+	// to metadata.
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	proxy.MetadataProvider = &testMetadataProvider{}
+	proxy.Passwd = []UserEntry{ // foo:foo
+		{Username: "foo", PasswordHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"},
+	}
+	req := templateHttpRequest()
+	req.Header.Add("Proxy-Authorization", "Basic Zm9vOndyb25n") // foo:wrong
+	req.RemoteAddr = "155.144.114.41:31337"
+	res, err := proxy.authenticateClient(req)
+	assert.Equal(t, authFailUser, res)
+	assert.NotNil(t, err)
+}
