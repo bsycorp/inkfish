@@ -335,6 +335,14 @@ func (proxy *Inkfish) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			FlushInterval: proxy.FlushInterval,
 			Transport: &http.Transport{
 				DisableCompression: true,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				MaxIdleConns:          100,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
 			},
 		}
 		proxy.requestHandler(nil, "http", rp).ServeHTTP(w, req)
@@ -383,8 +391,16 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	rp := &httputil.ReverseProxy{
 		Director: httpsDirector,
 		Transport: &http.Transport{
-			TLSClientConfig:    cConfig,
 			DisableCompression: true,
+			TLSClientConfig:    cConfig,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		},
 		FlushInterval: proxy.FlushInterval,
 	}
