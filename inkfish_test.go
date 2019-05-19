@@ -66,16 +66,16 @@ func init() {
 // -------------------
 
 func NewInsecureInkfish() *Inkfish {
-	r := NewInkfish(NewCertSigner(&StubCA))
+	p := NewInkfish(NewCertSigner(&StubCA))
 
 	// Allow CONNECT to any port, not just 443
-	r.ConnectPolicy = connectFilterAllowAny
+	p.ConnectPolicy = connectFilterAllowAny
 
 	// Disable client's TLS validation so we can connect to the test server
-	r.TLSClientConfig = &tls.Config{
+	p.Transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	return r
+	return p
 }
 
 // A test instance of an Inkfish proxy

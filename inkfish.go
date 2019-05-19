@@ -53,10 +53,6 @@ type Inkfish struct {
 	// TLSServerConfig specifies the tls.Config to use when generating leaf cert using CA.
 	TLSServerConfig *tls.Config
 
-	// TLSClientConfig specifies the tls.Config to use when establishing an upstream
-	// connection for proxying.
-	TLSClientConfig *tls.Config
-
 	// FlushInterval specifies the flush interval to flush to the client while copying
 	// the response body. If zero, no periodic flushing is done.
 	FlushInterval time.Duration
@@ -66,14 +62,31 @@ type Inkfish struct {
 
 	// Enable test mode (disables blocking of requests!)
 	InsecureTestMode bool
+
+	// Shared HTTP transport
+	Transport *http.Transport
 }
 
 func NewInkfish(signer *CertSigner) *Inkfish {
+	transport := &http.Transport{
+		DisableCompression: true,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          512,
+		MaxIdleConnsPerHost:   64,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	proxy := &Inkfish{
 		TLSServerConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},
 		CertSigner: signer,
+		Transport:  transport,
 	}
 	proxy.Metrics.Init()
 	return proxy
@@ -333,19 +346,7 @@ func (proxy *Inkfish) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		rp := &httputil.ReverseProxy{
 			Director:      httpDirector,
 			FlushInterval: proxy.FlushInterval,
-			Transport: &http.Transport{
-				DisableCompression: true,
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				MaxIdleConns:          512,
-				MaxIdleConnsPerHost:   64,
-				IdleConnTimeout:       30 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: 10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-			},
+			Transport:     proxy.Transport,
 		}
 		proxy.requestHandler(nil, "http", rp).ServeHTTP(w, req)
 	} else {
@@ -385,27 +386,9 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	}
 	defer cconn.Close()
 
-	cConfig := new(tls.Config)
-	if proxy.TLSClientConfig != nil {
-		*cConfig = *proxy.TLSClientConfig
-
-	}
 	rp := &httputil.ReverseProxy{
 		Director: httpsDirector,
-		Transport: &http.Transport{
-			DisableCompression: true,
-			TLSClientConfig:    cConfig,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			MaxIdleConns:          512,
-			MaxIdleConnsPerHost:   64,
-			IdleConnTimeout:       30 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
+		Transport: proxy.Transport,
 		FlushInterval: proxy.FlushInterval,
 	}
 
