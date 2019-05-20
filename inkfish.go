@@ -78,7 +78,7 @@ func NewInkfish(signer *CertSigner) *Inkfish {
 		MaxIdleConnsPerHost:   64,
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 	proxy := &Inkfish{
