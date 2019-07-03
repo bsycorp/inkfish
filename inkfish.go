@@ -429,11 +429,12 @@ func (proxy *Inkfish) bypassConnect(w http.ResponseWriter, r *http.Request) {
 	if err = clientConn.SetDeadline(time.Time{}); err != nil {
 		log.Println("error clearing connection timeouts:", err)
 	}
-	go proxy.transfer(destConn, clientConn)
-	go proxy.transfer(clientConn, destConn)
+	dstUrl := fmt.Sprintf("dst %s", r.URL)
+	go proxy.transfer(dstUrl, destConn, clientConn)
+	go proxy.transfer(dstUrl, clientConn, destConn)
 }
 
-func (proxy *Inkfish) transfer(destination io.WriteCloser, source io.ReadCloser) {
+func (proxy *Inkfish) transfer(dstUrl string, destination io.WriteCloser, source io.ReadCloser) {
 	defer destination.Close()
 	defer source.Close()
 	_, err := io.Copy(destination, source)
@@ -442,7 +443,7 @@ func (proxy *Inkfish) transfer(destination io.WriteCloser, source io.ReadCloser)
 	// to copy. This is common enough that we just ignore the error.
 	if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 		proxy.Metrics.OtherErrors.Inc(1)
-		log.Println("transfer error:", err)
+		log.Printf("transfer error: %v: %v", dstUrl, err)
 	}
 }
 
