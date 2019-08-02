@@ -5,8 +5,8 @@ go: 1.x
 env:
   - GO111MODULE=on
 script:
-  - go get -v
-  - go test -v
+  - go get -t -v -d
+  - go test
   - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o inkfish-linux-amd64
   - DOCKER_CONTENT_TRUST=1 docker build .
 deploy:
