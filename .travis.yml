@@ -3,6 +3,8 @@ services: docker
 language: go
 go: 1.x
 script:
+  - go get -v
+  - go test -v
   - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o inkfish-linux-amd64
   - DOCKER_CONTENT_TRUST=1 docker build .
 deploy:
