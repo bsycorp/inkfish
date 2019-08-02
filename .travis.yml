@@ -2,6 +2,8 @@ sudo: required
 services: docker
 language: go
 go: 1.x
+env:
+  - GO111MODULE=on
 script:
   - go get -v
   - go test -v
