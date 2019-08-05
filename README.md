@@ -21,9 +21,10 @@ Key features:
 
 ## Quick Start
 
-```shell
 You can start the proxy listening on port 8080 with a built-in demo config:
 
+```shell
+# Start proxy
 docker run -p 8080:8080 bsycorp/inkfish:latest /app/inkfish -metadata none -config /config/demo
 
 # Test as anonymous user
@@ -45,7 +46,8 @@ You can find the demo config over here: [/testdata/demo_config/](/testdata/demo_
 try out your own white-lists, you can mount them into the proxy container from your host:
 
 ```shell
-docker run -v ./my_config:/config/mine -p 8080:8080 bsycorp/inkfish:latest /inkfish -metadata none -config /config/mine
+docker run -v `pwd`/my_config:/config/mine -p 8080:8080 \
+    bsycorp/inkfish:latest /app/inkfish -metadata none -config /config/mine
 ```
 
 The next step would be to start the proxy in a cloud environment where you can use instance 
