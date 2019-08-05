@@ -5,12 +5,12 @@ go: 1.x
 env:
   - GO111MODULE=on
 script:
-  - go test
-  - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o inkfish-linux-amd64
-  - DOCKER_CONTENT_TRUST=1 docker build .
+  - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:${TRAVIS_BRANCH}
+  - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:${TRAVIS_BRANCH}-slim
+  - docker cp bsycorp/inkfish:${TRAVIS_BRANCH}-slim:/inkfish inkfish-linux-amd64
 deploy:
   - provider: script
-    script: bash ./scripts/deploy.sh
+    script: bash ./scripts/docker-deploy.sh
     on:
       tags: true
       repo: bsycorp/inkfish

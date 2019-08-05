@@ -7,10 +7,10 @@ RUN go mod download
 ADD . /src
 RUN make
 
-FROM bitnami/minideb:stretch
-WORKDIR /app
-COPY --from=build-env /src/testdata/demo_config /config/demo
+FROM scratch
+WORKDIR /
 COPY --from=build-env /src/build/inkfish-linux /inkfish
+COPY --from=build-env /etc/passwd /etc/passwd
 USER inkfish
 
 CMD ["/inkfish"]
