@@ -24,7 +24,7 @@ Key features:
 ```shell
 You can start the proxy listening on port 8080 with a built-in demo config:
 
-docker run -p 8080:8080 bsycorp/inkfish:latest /inkfish -metadata none -config /config/demo
+docker run -p 8080:8080 bsycorp/inkfish:latest /app/inkfish -metadata none -config /config/demo
 
 # Test as anonymous user
 export http_proxy=http://localhost:8080
