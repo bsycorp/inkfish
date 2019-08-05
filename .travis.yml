@@ -7,7 +7,8 @@ env:
 script:
   - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:${TRAVIS_BRANCH}
   - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:${TRAVIS_BRANCH}-slim
-  - docker cp bsycorp/inkfish:${TRAVIS_BRANCH}-slim:/inkfish inkfish-linux-amd64
+  - docker create --name built bsycorp/inkfish:${TRAVIS_BRANCH}-slim
+  - docker cp built:/inkfish inkfish-linux-amd64
 deploy:
   - provider: script
     script: bash ./scripts/docker-deploy.sh
