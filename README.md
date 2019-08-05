@@ -19,6 +19,48 @@ Key features:
 * TLS MITM by default, white-lists all requests at the URL level
 * Optional MITM bypass, by host
 
+## Quick Start
+
+```shell
+You can start the proxy listening on port 8080 with a built-in demo config:
+
+docker run -p 8080:8080 bsycorp/inkfish:latest /app/inkfish -metadata none -config /config/demo
+
+# Test as anonymous user
+export http_proxy=http://localhost:8080
+export https_proxy=http://localhost:8080
+export no_proxy=127.0.0.1
+
+curl -k https://ifconfig.io/   # This should work for anonymous
+curl -k https://google.com/    # This will not work for anonymous user
+
+# Test as an authenticated user
+export http_proxy=http://foo:bar@localhost:8080
+export https_proxy=http://foo:bar@localhost:8080
+
+curl -k https://google.com/    # This should work
+```
+
+You can find the demo config over here: [/testdata/demo_config/](/testdata/demo_config/). When you are ready to 
+try out your own white-lists, you can mount them into the proxy container from your host:
+
+```shell
+docker run -v ./my_config:/config/mine -p 8080:8080 bsycorp/inkfish:latest /inkfish -metadata none -config /config/mine
+```
+
+The next step would be to start the proxy in a cloud environment where you can use instance 
+metadata instead of "hard coded" proxy credentials.
+
+## How to run
+
+Three distribution mechanisms are offered:
+
+* Standard docker: `bsycorp/inkfish:x.y.z`. This is about 30MB and based on minideb.
+* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A container with only the static Linux binary.
+* Linux static binary: You can download this from the (releases page)[https://github.com/bsycorp/inkfish/releases].
+
+If you use the `slim` image, you will need to mount SSL certificates from your host into the container.
+
 ## Command-line arguments
 
 ```
@@ -34,7 +76,6 @@ Usage of ./inkfish:
     	path to configuration files (default ".")
   -metadata string
     	default metadata provider (aws,none) (default "aws")
-  -v	should every proxy request be logged to stdout
 ```
 
 ## Configuration file format
@@ -124,5 +165,4 @@ To grant instances with that tag unrestricted outbound HTTP(s) access.
 ## Known issues / TODO
 
 * Generated certs for sites expire 84 days. 
-* Graceful shutdown / draining not tested
 

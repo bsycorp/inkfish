@@ -6,11 +6,11 @@ RUN go mod download
 ADD . /src
 RUN make
 
-FROM bitnami/minideb:stretch
+FROM scratch
 RUN useradd -u 10001 inkfish
-RUN install_packages ca-certificates
+WORKDIR /
 COPY --from=build-env /src/build/inkfish-linux /app/inkfish
-COPY --from=build-env /src/testdata/demo_config/ /config/demo
+COPY --from=build-env /etc/passwd /etc/passwd
 USER inkfish
 
 CMD ["/inkfish"]

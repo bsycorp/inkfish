@@ -7,6 +7,7 @@ import (
 	"github.com/syntaqx/go-metrics-datadog"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 )
@@ -14,8 +15,8 @@ import (
 func main() {
 	// verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	configDir := flag.String("config", ".", "path to configuration files")
-	caCert := flag.String("cacert", "ca.pem", "path to CA cert file")
-	caKey := flag.String("cakey", "ca.key.pem", "path to CA key file")
+	caCert := flag.String("cacert", "", "path to CA cert file")
+	caKey := flag.String("cakey", "", "path to CA key file")
 	metadataFrom := flag.String("metadata", "aws", "default metadata provider (aws,none)")
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	metrics := flag.String("metrics", "none", "metrics provider (none,datadog,prometheus)")
@@ -28,6 +29,14 @@ func main() {
 	flag.Parse()
 
 	proxy := inkfish.NewInkfish(inkfish.NewCertSigner(&inkfish.StubCA))
+
+	// Load CA cert and key.
+	if *caCert == "" {
+		*caCert = path.Join(*configDir, "ca.pem")
+	}
+	if *caKey == "" {
+		*caKey = path.Join(*configDir, "ca.key.pem")
+	}
 	err := proxy.SetCAFromFiles(*caCert, *caKey)
 	if err != nil {
 		log.Fatal("error loading CA config: ", err)
@@ -43,7 +52,7 @@ func main() {
 	}
 
 	// Metadata
-	log.Println("metadata update interval: ", metadataUpdateEvery)
+	log.Println("metadata update interval: ", *metadataUpdateEvery)
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
