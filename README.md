@@ -31,14 +31,14 @@ export http_proxy=http://localhost:8080
 export https_proxy=http://localhost:8080
 export no_proxy=127.0.0.1
 
-curl https://ifconfig.io/   # This should work for anonymous
-curl https://google.com/    # This will not work for anonymous user
+curl -k https://ifconfig.io/   # This should work for anonymous
+curl -k https://google.com/    # This will not work for anonymous user
 
 # Test as an authenticated user
 export http_proxy=http://foo:bar@localhost:8080
 export https_proxy=http://foo:bar@localhost:8080
 
-curl https://google.com/    # This should work
+curl -k https://google.com/    # This should work
 ```
 
 You can find the demo config over here: [/testdata/demo_config/](/testdata/demo_config/). When you are ready to 
