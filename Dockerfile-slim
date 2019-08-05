@@ -1,5 +1,4 @@
 FROM golang:1.11 AS build-env
-RUN useradd -u 10001 inkfish
 WORKDIR /src
 
 COPY go.mod go.sum /src/
@@ -8,6 +7,7 @@ ADD . /src
 RUN make
 
 FROM scratch
+RUN useradd -u 10001 inkfish
 WORKDIR /
 COPY --from=build-env /src/build/inkfish-linux /inkfish
 COPY --from=build-env /etc/passwd /etc/passwd
