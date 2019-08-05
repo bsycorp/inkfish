@@ -65,25 +65,38 @@ If you use the `slim` image, you will need to mount SSL certificates from your h
 
 ## Command-line arguments
 
-```
-$ ./inkfish -h
-Usage of ./inkfish:
+```shell
+$ docker run bsycorp/inkfish:latest-slim  -h
+Usage of /app/inkfish:
   -addr string
     	proxy listen address (default ":8080")
   -cacert string
-    	path to CA cert file (default "ca.pem")
+    	path to CA cert file
   -cakey string
-    	path to CA key file (default "ca.key.pem")
+    	path to CA key file
+  -client-idle-timeout int
+    	client idle timeout (default 300)
+  -client-read-timeout int
+    	client read timeout
+  -client-write-timeout int
+    	client write timeout
   -config string
     	path to configuration files (default ".")
+  -insecure-test-mode
+    	test mode (does not block)
   -metadata string
     	default metadata provider (aws,none) (default "aws")
+  -metadata-update-every int
+    	metadata update interval (default 10)
+  -metrics string
+    	metrics provider (none,datadog,prometheus) (default "none")
 ```
+
 
 ## Configuration file format
 
 The `-config` argument supplies a path to a directory full of "access control lists" and password file
-entries. 
+entries.
 
 ### Passwd files
 
