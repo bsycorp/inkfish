@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Metadata
-	log.Println("metadata update interval: ", metadataUpdateEvery)
+	log.Println("metadata update interval: ", *metadataUpdateEvery)
 	metadataCache := inkfish.NewMetadataCache()
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
