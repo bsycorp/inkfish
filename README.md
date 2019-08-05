@@ -57,11 +57,14 @@ metadata instead of "hard coded" proxy credentials.
 
 Three distribution mechanisms are offered:
 
-* Standard docker: `bsycorp/inkfish:x.y.z`. This is about 30MB and based on minideb.
-* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A container with only the static Linux binary.
+* Standard docker: `bsycorp/inkfish:x.y.z`. This is about 30MB and based on minideb. The entry point is a shell.
+* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A 10MB container with only the static Linux binary. 
 * Linux static binary: You can download this from the (releases page)[https://github.com/bsycorp/inkfish/releases].
 
-If you use the `slim` image, you will need to mount SSL certificates from your host into the container.
+If you use the `slim` image, you will also need to mount SSL certificates (configuration of what upstream CAs
+are trusted) into the container in addition to your proxy configuration files.  On a Linux host, this is usually
+done by volume mounting SSL certs from the host into the container by adding  `-v /etc/ssl/certs:/etc/ssl/certs` 
+to the docker run command.
 
 ## Command-line arguments
 
@@ -144,7 +147,7 @@ unintended matches.
 
 A more complex acl example might look like:
 
-* `acl HEAD,GET,POST ^http(s)://api\.foo\.com/v2/
+* `acl HEAD,GET,POST ^http(s)://api\.foo\.com/v2/`
 
 The `bypass` directive is used to disable TLS MITM for specific hosts. You should supply a regular
 expression which can be matched directly against the client's CONNECT request. For example:
@@ -158,7 +161,9 @@ There is also a shorthand for a `url` regex that includes all AWS S3 URL notatio
 
 Modifiers alter the processing of a particular ACL. Currently supported modifiers are:
 
-* `quiet` - Suppresses logging of successful requests for the URL pattern or S3 bucket.
+* `quiet` - Suppresses logging of successful requests for the URL pattern or S3 bucket. CONNECT will
+  still be logged, but not individual requests. This is useful for thing like SQS or log upload 
+  endpoints where many requests are expected under ordinary circumstances.
 
 ## Metadata lookup
 
