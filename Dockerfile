@@ -8,6 +8,7 @@ RUN make
 
 FROM bitnami/minideb:stretch
 RUN useradd -u 10001 inkfish
+RUN install_packages ca-certificates
 WORKDIR /
 COPY --from=build-env /src/build/inkfish-linux /inkfish
 COPY --from=build-env /src/testdata/demo_config/ /config/demo
