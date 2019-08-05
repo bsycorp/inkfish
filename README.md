@@ -165,5 +165,4 @@ To grant instances with that tag unrestricted outbound HTTP(s) access.
 ## Known issues / TODO
 
 * Generated certs for sites expire 84 days. 
-* Graceful shutdown / draining not tested
 
