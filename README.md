@@ -51,6 +51,16 @@ docker run -v ./my_config:/config/mine -p 8080:8080 bsycorp/inkfish:latest /inkf
 The next step would be to start the proxy in a cloud environment where you can use instance 
 metadata instead of "hard coded" proxy credentials.
 
+## How to run
+
+Three distribution mechanisms are offered:
+
+* Standard docker: `bsycorp/inkfish:x.y.z`. This is about 30MB and based on minideb.
+* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A container with only the static Linux binary.
+* Linux static binary: You can download this from the (releases page)[https://github.com/bsycorp/inkfish/releases].
+
+If you use the `slim` image, you will need to mount SSL certificates from your host into the container.
+
 ## Command-line arguments
 
 ```
