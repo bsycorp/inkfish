@@ -5,12 +5,13 @@ COPY go.mod go.sum /src/
 RUN go mod download
 ADD . /src
 RUN make
+RUN useradd -u 10001 inkfish
 
 FROM scratch
-RUN useradd -u 10001 inkfish
 WORKDIR /
 COPY --from=build-env /src/build/inkfish-linux /app/inkfish
 COPY --from=build-env /etc/passwd /etc/passwd
 USER inkfish
 
-CMD ["/inkfish"]
+ENTRYPOINT ["/app/inkfish"]
+CMD ["/app/inkfish"]

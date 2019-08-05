@@ -13,4 +13,4 @@ COPY --from=build-env /src/build/inkfish-linux /app/inkfish
 COPY --from=build-env /src/testdata/demo_config/ /config/demo
 USER inkfish
 
-CMD ["/inkfish"]
+CMD ["/app/inkfish"]
