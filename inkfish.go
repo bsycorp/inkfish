@@ -331,7 +331,11 @@ const (
 
 func (proxy *Inkfish) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Entry point for client requests
-	if req.Method == "CONNECT" {
+	if req.URL.Scheme == "" && req.URL.Path == "/healthz" {
+		// Health check
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	} else if req.Method == "CONNECT" {
 		// Client requested a CONNECT tunnel from the proxy
 		filterAction := proxy.filterConnect(w, req)
 		if filterAction == ConnectMitm {

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/bsycorp/inkfish"
 	"github.com/syntaqx/go-metrics-datadog"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"path"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -25,6 +29,7 @@ func main() {
 	clientIdleTimeout := flag.Int("client-idle-timeout", 300, "client idle timeout")
 	metadataUpdateEvery := flag.Int("metadata-update-every", 10, "metadata update interval")
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
+	drainTime := flag.Int64("drain-time", 30, "shutdown drain deadline (seconds)")
 
 	flag.Parse()
 
@@ -52,8 +57,10 @@ func main() {
 	}
 
 	// Metadata
-	log.Println("metadata update interval: ", *metadataUpdateEvery)
 	metadataCache := inkfish.NewMetadataCache()
+	if *metadataFrom != "none" {
+		log.Println("metadata update interval: ", *metadataUpdateEvery)
+	}
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
 		sess, err := session.NewSession()
@@ -109,5 +116,32 @@ func main() {
 		IdleTimeout:  time.Duration(*clientIdleTimeout) * time.Second,
 		Handler:      proxy,
 	}
-	log.Fatal(srv.ListenAndServe())
+
+	idleConnsClosed := make(chan struct{})
+
+	go func() {
+		sigint := make(chan os.Signal, 1)
+
+		signal.Notify(sigint, os.Interrupt)
+		signal.Notify(sigint, syscall.SIGTERM)
+
+		<-sigint
+
+		log.Println("caught shutdown signal, draining...")
+		ctx, _ := context.WithTimeout(context.Background(), time.Second * time.Duration(*drainTime))
+		if err := srv.Shutdown(ctx); err != nil {
+			// Error from closing listeners, or context timeout:
+			log.Printf("error: http Shutdown: %v", err)
+		}
+		close(idleConnsClosed)
+	}()
+
+	log.Println("listen address: ", *addr)
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		// Error starting or closing listener:
+		log.Printf("error: http ListenAndServe: %v", err)
+	}
+
+	<-idleConnsClosed
+	log.Println("connections drained, shutdown complete")
 }
