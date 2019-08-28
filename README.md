@@ -58,13 +58,14 @@ metadata instead of "hard coded" proxy credentials.
 Three distribution mechanisms are offered:
 
 * Standard docker: `bsycorp/inkfish:x.y.z`. This is about 30MB and based on minideb. The entry point is a shell.
-* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A 10MB container with only the static Linux binary. 
+* Slim docker: `bsycorp/inkfish:x.y.z-slim`. A 10MB container with only the static Linux binary.  The entry point
+  is the inkfish binary as is customary for containers with no shell.
 * Linux static binary: You can download this from the (releases page)[https://github.com/bsycorp/inkfish/releases].
 
 If you use the `slim` image, you will also need to mount SSL certificates (configuration of what upstream CAs
 are trusted) into the container in addition to your proxy configuration files.  On a Linux host, this is usually
 done by volume mounting SSL certs from the host into the container by adding  `-v /etc/ssl/certs:/etc/ssl/certs` 
-to the docker run command.
+to the docker run command. 
 
 ## Command-line arguments
 
@@ -85,6 +86,8 @@ Usage of /app/inkfish:
     	client write timeout
   -config string
     	path to configuration files (default ".")
+  -drain-time int
+    	shutdown drain deadline (seconds) (default 30)
   -insecure-test-mode
     	test mode (does not block)
   -metadata string
@@ -182,7 +185,16 @@ url ^http(s)?://.*$
 
 To grant instances with that tag unrestricted outbound HTTP(s) access.
 
+### Health Check
+
+Configure health checks for the service to hit the listening port on `/healthz`.
+
+### Graceful shutdown
+
+Set `drain-time` to your shutdown connection drain deadline. The default is 
+30 seconds. If you have a load balancer forwarding requests to inkfish, your 
+load balancer drain time should be higher than this value.  
+
 ## Known issues / TODO
 
 * Generated certs for sites expire 84 days. 
-
