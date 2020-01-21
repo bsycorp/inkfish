@@ -283,7 +283,7 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 		return errors.Wrap(err, msg)
 	}
 	for _, fi := range files {
-		if fi.IsDir() {
+		if !fi.Mode().IsRegular() {
 			continue
 		}
 		fullpath := filepath.Join(configDir, fi.Name())
