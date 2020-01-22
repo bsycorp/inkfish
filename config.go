@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -284,6 +285,10 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 		return errors.Wrap(err, msg)
 	}
 	for _, fi := range files {
+		ext := filepath.Ext(fi.Name())
+		if ext != ".conf" && ext != ".passwd" {
+			continue
+		}
 		if fi.Mode() & os.ModeSymlink != 0 {
 			// Attempt to resolve symbolic link. Any errors and we
 			// just skip the file.
@@ -304,18 +309,20 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed read config file: %v", fullpath)
 		}
-		if filepath.Ext(fi.Name()) == ".conf" {
+		if ext == ".conf" {
 			acl, err := loadAclFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
 			proxy.Acls = append(proxy.Acls, *acl)
-		} else if filepath.Ext(fi.Name()) == ".passwd" {
+			log.Println("loaded config file", fullpath)
+		} else if ext == ".passwd" {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}
 			proxy.Passwd = append(proxy.Passwd, userRecords...)
+			log.Println("loaded passwd file:", fullpath)
 		}
 	}
 	return nil
