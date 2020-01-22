@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -283,6 +284,18 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 		return errors.Wrap(err, msg)
 	}
 	for _, fi := range files {
+		if fi.Mode() & os.ModeSymlink != 0 {
+			// Attempt to resolve symbolic link. Any errors and we
+			// just skip the file.
+			target, err := filepath.EvalSymlinks(filepath.Join(configDir, fi.Name()))
+			if err != nil {
+				continue
+			}
+			fi, err = os.Lstat(target)
+			if err != nil {
+				continue
+			}
+		}
 		if !fi.Mode().IsRegular() {
 			continue
 		}
