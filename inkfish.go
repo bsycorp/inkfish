@@ -65,6 +65,9 @@ type Inkfish struct {
 
 	// Shared HTTP transport
 	Transport *http.Transport
+
+	//Prometheus Handler
+	PromHandler http.Handler
 }
 
 func NewInkfish(signer *CertSigner) *Inkfish {
@@ -335,6 +338,8 @@ func (proxy *Inkfish) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// Health check
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte("ok"))
+	} else if req.URL.Scheme == "" && req.URL.Path == "/metrics" && proxy.PromHandler != nil {
+		proxy.PromHandler.ServeHTTP(w, req)
 	} else if req.Method == "CONNECT" {
 		// Client requested a CONNECT tunnel from the proxy
 		filterAction := proxy.filterConnect(w, req)
