@@ -57,6 +57,7 @@ func (HeaderHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func init() {
 	http.DefaultServeMux.Handle("/foo", ConstantHandler("foo"))
 	http.DefaultServeMux.Handle("/bar", ConstantHandler("bar"))
+	http.DefaultServeMux.Handle("/metrics", ConstantHandler("inkfish_proxy_connect_denied_count 0 inkfish_proxy_runtime_ReadMemStats_timer_bucket{le=\"0.5\"} 67139"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
 	http.DefaultServeMux.Handle("/header", HeaderHandler{})
 }
@@ -131,6 +132,21 @@ func expectResponse(t *testing.T, client *http.Client, url string, expectBody []
 		t.Error("Unexpected status code: ", statusCode)
 	}
 	if bytes.Compare(body, expectBody) != 0 {
+		t.Error("Unexpected result: ", string(body))
+	}
+	return body
+}
+
+func expectResponseContains(t *testing.T, client *http.Client, url string, expectBody []byte) []byte {
+	t.Helper()
+	statusCode, body, err := get(client, url)
+	if err != nil {
+		t.Fatal("Can't fetch url", url, err)
+	}
+	if statusCode != 200 {
+		t.Error("Unexpected status code: ", statusCode)
+	}
+	if !bytes.Contains(body, []byte(expectBody)) {
 		t.Error("Unexpected result: ", string(body))
 	}
 	return body
@@ -411,4 +427,21 @@ func TestTestMode(t *testing.T) {
 	// The proxy is in test mode now so this request should succeed
 	proxy.InsecureTestMode = true
 	expectResponse(t, client, srv_https.URL+"/foo", []byte("foo"))
+}
+
+func TestPrometheusMetrics(t *testing.T) {
+	acl1 := MustParseAcl(`
+		from tag:me
+		from ANONYMOUS
+		url ^.*/metrics$
+	`)
+	proxy := NewInsecureInkfish()
+	proxy.MetadataProvider = &LocalHostIsMeMetadataProvider{}
+	proxy.Acls = []Acl{acl1}
+	s := NewInkfishTest(proxy)
+	defer s.Close()
+
+	client := s.Client(nil)
+
+	expectResponseContains(t, client, srv_plain.URL+"/metrics", []byte("inkfish_proxy_"))
 }

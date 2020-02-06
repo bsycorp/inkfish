@@ -6,6 +6,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/bsycorp/inkfish"
 	"github.com/syntaqx/go-metrics-datadog"
+	prometheusmetrics "github.com/deathowl/go-metrics-prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
 	"net/http"
 	"os"
@@ -100,6 +103,10 @@ func main() {
 		//reporter.Client.Tags = append(reporter.Client.Tags, "us-east-1a")
 		go reporter.Flush()
 		log.Println("metrics to datadogstatsd at: ", dogStatsdAddr)
+	} else if strings.HasPrefix(*metrics, "prometheus") {
+		prometheusClient := prometheusmetrics.NewPrometheusProvider(proxy.Metrics.Registry, "inkfish", "proxy", prometheus.DefaultRegisterer, 1*time.Second)
+		go prometheusClient.UpdatePrometheusMetrics()
+		proxy.PromHandler = promhttp.Handler()
 	} else {
 		log.Fatal("unknown metrics provider: ", *metrics)
 	}
