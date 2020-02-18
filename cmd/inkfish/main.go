@@ -5,15 +5,16 @@ import (
 	"flag"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/bsycorp/inkfish"
-	"github.com/syntaqx/go-metrics-datadog"
 	prometheusmetrics "github.com/deathowl/go-metrics-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/syntaqx/go-metrics-datadog"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -33,6 +34,7 @@ func main() {
 	metadataUpdateEvery := flag.Int("metadata-update-every", 10, "metadata update interval")
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 	drainTime := flag.Int64("drain-time", 30, "shutdown drain deadline (seconds)")
+	connectPorts := flag.String("connect-ports", "443", "comma delimited list of valid CONNECT ports")
 
 	flag.Parse()
 
@@ -57,6 +59,24 @@ func main() {
 	if *insecureTestMode {
 		log.Println("WARNING: PROXY IS IN TEST MODE, REQUESTS WILL NOT BE BLOCKED")
 		proxy.InsecureTestMode = true
+	}
+	// Parse CONNECT ports
+	portList := strings.Split(*connectPorts, ",")
+	validConnectPorts := make([]int, 1)
+	for _, p := range portList {
+		val, err := strconv.Atoi(p)
+		if err != nil {
+			log.Fatal("invalid CONNECT port: ", p)
+		}
+		validConnectPorts = append(validConnectPorts, val)
+	}
+	proxy.ConnectPolicy = func(host string, port int) bool {
+		for _, p := range validConnectPorts {
+			if port == p {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Metadata
