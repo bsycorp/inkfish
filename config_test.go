@@ -238,3 +238,12 @@ func TestLoadConfig(t *testing.T) {
 
 	assert.Equal(t, 2, len(proxy.Acls))
 }
+
+func TestLoadConfigWithSymlink(t *testing.T) {
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	err := proxy.LoadConfigFromDirectory("testdata/symlink_test_config")
+	assert.NotNil(t, proxy.Acls)
+	assert.Nil(t, err)
+
+	assert.Equal(t, 2, len(proxy.Acls))
+}
