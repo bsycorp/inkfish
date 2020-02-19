@@ -5,13 +5,13 @@ go: 1.x
 env:
   - GO111MODULE=on
 script:
-  - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:${TRAVIS_BUILD_ID}
-  - DOCKER_CONTENT_TRUST=1 docker build . -f Dockerfile-slim -t bsycorp/inkfish:${TRAVIS_BUILD_ID}-slim
-  - docker create --name built bsycorp/inkfish:${TRAVIS_BUILD_ID}
+  - DOCKER_CONTENT_TRUST=1 docker build . -t bsycorp/inkfish:0.0.${TRAVIS_BUILD_ID}
+  - DOCKER_CONTENT_TRUST=1 docker build . -f Dockerfile-slim -t bsycorp/inkfish:0.0.${TRAVIS_BUILD_ID}-slim
+  - docker create --name built bsycorp/inkfish:0.0.${TRAVIS_BUILD_ID}
   - docker cp built:/app/inkfish inkfish-linux-amd64
 deploy:
   - provider: script
-    script: bash ./scripts/docker-deploy.sh ${TRAVIS_BUILD_ID}
+    script: bash ./scripts/docker-deploy.sh 0.0.${TRAVIS_BUILD_ID}
     on:
       repo: bsycorp/inkfish
   - provider: script
