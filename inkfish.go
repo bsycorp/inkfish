@@ -438,14 +438,120 @@ func (proxy *Inkfish) bypassConnect(w http.ResponseWriter, r *http.Request) {
 	if err = clientConn.SetDeadline(time.Time{}); err != nil {
 		log.Println("error clearing connection timeouts:", err)
 	}
-	dstUrl := fmt.Sprintf("dst %s", r.URL)
-	go proxy.transfer(dstUrl, destConn, clientConn)
-	go proxy.transfer(dstUrl, clientConn, destConn)
+	//dstUrl := fmt.Sprintf("dst %s", r.URL)
+	Proxy(destConn, clientConn, 28800 /* 8 hrs */)
+	//go proxy.transfer(dstUrl, destConn, clientConn)
+	//go proxy.transfer(dstUrl, clientConn, destConn)
 }
+
+func secondsDurationToAbsolute(seconds int64) (absolute time.Time) {
+	return time.Now().Add(time.Duration(seconds) * time.Second)
+}
+
+func SetDeadlineSeconds(conn net.Conn, seconds int64) (err error) {
+	if seconds == 0 {
+		return conn.SetDeadline(time.Time{})
+	}
+	return conn.SetDeadline(secondsDurationToAbsolute(seconds))
+}
+
+func SetReadDeadlineSeconds(conn net.Conn, seconds int64) (err error) {
+	if seconds == 0 {
+		return conn.SetReadDeadline(time.Time{})
+	}
+	return conn.SetReadDeadline(secondsDurationToAbsolute(seconds))
+}
+
+func SetWriteDeadlineSeconds(conn net.Conn, seconds int64) (err error) {
+	if seconds == 0 {
+		return conn.SetWriteDeadline(time.Time{})
+	}
+	return conn.SetWriteDeadline(secondsDurationToAbsolute(seconds))
+}
+
+func CopyWithIdleTimeout(dst net.Conn, src net.Conn, timeout int64) (written int64, err error) {
+	buf := make([]byte, 32*1024)
+	for {
+		SetReadDeadlineSeconds(src, timeout)
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			SetWriteDeadlineSeconds(dst, timeout)
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			err = er
+			break
+		}
+	}
+	return written, err
+}
+
+func Proxy(srvConn, cliConn net.Conn, timeout int64) {
+	// channels to wait on the close event for each connection
+	serverClosed := make(chan struct{}, 1)
+	clientClosed := make(chan struct{}, 1)
+
+	go broker(srvConn,cliConn, clientClosed, timeout)
+	go broker(cliConn, srvConn, serverClosed, timeout)
+
+	// wait for one half of the proxy to exit, then trigger a shutdown of
+	// the other half by calling CloseRead(). This will break the read
+	// loop in the broker and allow us to fully close the connection
+	// cleanly without a "use of closed network connection" error.
+	var waitFor chan struct{}
+	select {
+	case <-clientClosed:
+		_ = srvConn.Close()
+		waitFor = serverClosed
+	case <-serverClosed:
+		_ = cliConn.Close()
+		waitFor = clientClosed
+	}
+
+	// Wait for the other connection to close.
+	// This "waitFor" pattern isn't required, but gives us a way to track
+	// the connection and ensure all copies terminate correctly; we can
+	// trigger stats on entry and deferred exit of this function.
+	<-waitFor
+}
+
+// This does the actual data transfer.
+// The broker only closes the Read side.
+func broker(dst, src net.Conn, srcClosed chan struct{}, timeout int64) {
+	// We can handle errors in a finer-grained manner by inlining
+	// io.Copy (it's simple, and we drop the ReaderFrom or WriterTo
+	// checks for net.Conn->net.Conn transfers, which aren't needed).
+	// This would also let us adjust buffersize.
+	_, err := CopyWithIdleTimeout(dst, src, timeout)
+
+	if err != nil {
+		// log.Printf("Copy error: %s", err)
+	}
+	if err := src.Close(); err != nil {
+		// log.Printf("Close error: %s", err)
+	}
+	srcClosed <- struct{}{}
+}
+
 
 func (proxy *Inkfish) transfer(dstUrl string, destination io.WriteCloser, source io.ReadCloser) {
 	defer destination.Close()
 	defer source.Close()
+	// _, err := copyStream(destination, source)
 	_, err := io.Copy(destination, source)
 	// We're running transfers in both directions concurrently. It can happen that
 	// one side falls out of the transfer loop and sister goroutine is still trying
