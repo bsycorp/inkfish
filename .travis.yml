@@ -13,7 +13,6 @@ deploy:
   - provider: script
     script: bash ./scripts/docker-deploy.sh
     on:
-      tags: true
       repo: bsycorp/inkfish
   - provider: releases
     skip_cleanup: true
