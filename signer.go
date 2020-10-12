@@ -1,5 +1,4 @@
 // See also: https://github.com/elazarl/goproxy/pull/314
-// And: https://github.com/elazarl/goproxy/pull/284 - We add cert caching in a different way.
 // And: https://github.com/elazarl/goproxy/pull/256 - This could be important; there's an fd leak
 
 package inkfish
@@ -11,17 +10,16 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"log"
 	"math/big"
 	"net"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
 
 const signerVersion = ":inkfish1"
-const maxCertificateLifetimeDays = 84
+const certLifetimeMinutes = 240   // Set the NotAfter to be now + this value
+const certExpiresSoon = 30        // Count cert as expired if less than this many minutes to live
 const rsaKeyBits = 2048
 
 type CertSigner struct {
@@ -42,29 +40,6 @@ func NewCertSigner(ca *tls.Certificate) *CertSigner {
 	return &signer
 }
 
-func stripPort(s string) string {
-	ix := strings.IndexRune(s, ':')
-	if ix == -1 {
-		return s
-	}
-	return s[:ix]
-}
-
-func (certSigner *CertSigner) TLSConfig() func(host string) (*tls.Config, error) {
-	return func(host string) (*tls.Config, error) {
-		var config tls.Config
-		config = *certSigner.TlsConfig
-		log.Printf("signing for %s", stripPort(host))
-		cert, err := certSigner.signHost([]string{stripPort(host)})
-		if err != nil {
-			log.Printf("Cannot sign host certificate with provided CA: %s", err)
-			return nil, err
-		}
-		config.Certificates = append(config.Certificates, cert)
-		return &config, nil
-	}
-}
-
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
 	copy(c, lst)
@@ -82,20 +57,19 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	// Fast path; is it cached?
 	hash := hashSorted(append(hosts, signerVersion))
 	certSigner.CertCacheMutex.Lock()
+	defer certSigner.CertCacheMutex.Unlock()
+
 	cachedCert, found := certSigner.CertCache[string(hash)]
-	certSigner.CertCacheMutex.Unlock()
-	if found {
+	if found && time.Now().Add(certExpiresSoon * time.Minute).Before(cachedCert.Leaf.NotAfter) {
 		return cachedCert, nil
 	}
 
+	// Slow path; the cert is either not there, or expiring soon.
 	if x509ca, err = x509.ParseCertificate(certSigner.CA.Certificate[0]); err != nil {
 		return
 	}
 	start := time.Now().Add(time.Duration(-5) * time.Minute)
-	end := time.Now().AddDate(0, 0, maxCertificateLifetimeDays)
-	if err != nil {
-		panic(err)
-	}
+	end := time.Now().Add(certLifetimeMinutes * time.Minute)
 
 	randomSerial := make([]byte, 20)
 	_, err = rand.Read(randomSerial)
@@ -104,7 +78,7 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	}
 	serial := new(big.Int)
 	serial.SetBytes(randomSerial)
-	template := x509.Certificate{
+	x509cert := x509.Certificate{
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
@@ -119,10 +93,10 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
+			x509cert.IPAddresses = append(x509cert.IPAddresses, ip)
 		} else {
-			template.DNSNames = append(template.DNSNames, h)
-			template.Subject.CommonName = h
+			x509cert.DNSNames = append(x509cert.DNSNames, h)
+			x509cert.Subject.CommonName = h
 		}
 	}
 	var certpriv *rsa.PrivateKey
@@ -130,16 +104,15 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 		return
 	}
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, &certpriv.PublicKey, certSigner.CA.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(rand.Reader, &x509cert, x509ca, &certpriv.PublicKey, certSigner.CA.PrivateKey); err != nil {
 		return
 	}
 	leafCert := tls.Certificate{
 		Certificate: [][]byte{derBytes, certSigner.CA.Certificate[0]},
 		PrivateKey:  certpriv,
+		Leaf: &x509cert,
 	}
-	certSigner.CertCacheMutex.Lock()
 	certSigner.CertCache[string(hash)] = leafCert
-	certSigner.CertCacheMutex.Unlock()
 
 	return leafCert, nil
 }
