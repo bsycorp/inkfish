@@ -195,6 +195,3 @@ Set `drain-time` to your shutdown connection drain deadline. The default is
 30 seconds. If you have a load balancer forwarding requests to inkfish, your 
 load balancer drain time should be higher than this value.  
 
-## Known issues / TODO
-
-* Generated certs for sites expire 84 days. 
