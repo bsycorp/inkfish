@@ -18,26 +18,35 @@ import (
 )
 
 const signerVersion = ":inkfish1"
-const certLifetimeMinutes = 240   // Set the NotAfter to be now + this value
-const certExpiresSoon = 30        // Count cert as expired if less than this many minutes to live
+const hardLifetime = 4 * time.Hour         // Published cert lifetime, from generation
+const softLifetime = 2 * time.Hour         // Refresh after certificate is "this old"
+const allowedClockDrift = 5 * time.Minute  // Issue this many minutes in past to forgive skew
 const rsaKeyBits = 2048
 
 type CertSigner struct {
-	CA             *tls.Certificate
-	TlsConfig      *tls.Config
-	CertCache      map[string]tls.Certificate
-	CertCacheMutex *sync.Mutex
+	CA                  *tls.Certificate
+	TlsConfig           *tls.Config
+	CertCache           map[string]tls.Certificate
+	CertCacheMutex      *sync.Mutex
+	CertHardLifetime    time.Duration
+	CertSoftLifetime    time.Duration
+	AllowedClockDrift   time.Duration
+	Now                 func() time.Time
 }
 
 func NewCertSigner(ca *tls.Certificate) *CertSigner {
-	signer := CertSigner{}
-	signer.CA = ca
-	signer.TlsConfig = &tls.Config{
-		InsecureSkipVerify: false,
+	return &CertSigner{
+		CA: ca,
+		TlsConfig: &tls.Config{
+			InsecureSkipVerify: false,
+		},
+		CertCache:           map[string]tls.Certificate{},
+		CertCacheMutex:      &sync.Mutex{},
+		CertHardLifetime:    hardLifetime,
+		CertSoftLifetime:    softLifetime,
+		AllowedClockDrift:   allowedClockDrift,
+		Now:                 time.Now,
 	}
-	signer.CertCache = map[string]tls.Certificate{}
-	signer.CertCacheMutex = &sync.Mutex{}
-	return &signer
 }
 
 func hashSorted(lst []string) []byte {
@@ -51,6 +60,10 @@ func hashSorted(lst []string) []byte {
 	return h.Sum(nil)
 }
 
+func (certSigner *CertSigner) needsRefresh(cert *x509.Certificate, now time.Time) bool {
+	return cert.NotAfter.Sub(now) < certSigner.CertSoftLifetime
+}
+
 func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 
@@ -60,7 +73,8 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	defer certSigner.CertCacheMutex.Unlock()
 
 	cachedCert, found := certSigner.CertCache[string(hash)]
-	if found && time.Now().Add(certExpiresSoon * time.Minute).Before(cachedCert.Leaf.NotAfter) {
+	now := certSigner.Now()
+	if found && !certSigner.needsRefresh(cachedCert.Leaf, now) {
 		return cachedCert, nil
 	}
 
@@ -68,8 +82,6 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	if x509ca, err = x509.ParseCertificate(certSigner.CA.Certificate[0]); err != nil {
 		return
 	}
-	start := time.Now().Add(time.Duration(-5) * time.Minute)
-	end := time.Now().Add(certLifetimeMinutes * time.Minute)
 
 	randomSerial := make([]byte, 20)
 	_, err = rand.Read(randomSerial)
@@ -84,8 +96,8 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 		Subject: pkix.Name{
 			Organization: []string{"Inkfish MITM Proxy"},
 		},
-		NotBefore: start,
-		NotAfter:  end,
+		NotBefore: now.Add(-certSigner.AllowedClockDrift),
+		NotAfter:  now.Add(certSigner.CertHardLifetime),
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -110,7 +122,7 @@ func (certSigner *CertSigner) signHost(hosts []string) (cert tls.Certificate, er
 	leafCert := tls.Certificate{
 		Certificate: [][]byte{derBytes, certSigner.CA.Certificate[0]},
 		PrivateKey:  certpriv,
-		Leaf: &x509cert,
+		Leaf:        &x509cert,
 	}
 	certSigner.CertCache[string(hash)] = leafCert
 
