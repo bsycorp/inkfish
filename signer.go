@@ -18,8 +18,8 @@ import (
 )
 
 const signerVersion = ":inkfish1"
-const hardLifetime = 4 * time.Hour         // Published cert lifetime, from generation
-const softLifetime = 2 * time.Hour         // Refresh after certificate is "this old"
+const hardLifetime = 5 * time.Hour         // Published cert lifetime, from generation
+const softLifetime = 4 * time.Hour         // Refresh after certificate is "this old"
 const allowedClockDrift = 5 * time.Minute  // Issue this many minutes in past to forgive skew
 const rsaKeyBits = 2048
 
