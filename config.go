@@ -327,3 +327,49 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 	}
 	return nil
 }
+
+func (proxy *Inkfish) ReloadAclsFromDirectory(configDir string) error {
+	// Reload ACLs entries from a directory
+	files, err := ioutil.ReadDir(configDir)
+	if err != nil {
+		msg := fmt.Sprintf("failed to list config dir: %v", configDir)
+		return errors.Wrap(err, msg)
+	}
+	acls := []Acl{}
+	for _, fi := range files {
+		ext := filepath.Ext(fi.Name())
+		if ext != ".conf" {
+			continue
+		}
+		if fi.Mode() & os.ModeSymlink != 0 {
+			// Attempt to resolve symbolic link. Any errors and we
+			// just skip the file.
+			target, err := filepath.EvalSymlinks(filepath.Join(configDir, fi.Name()))
+			if err != nil {
+				continue
+			}
+			fi, err = os.Lstat(target)
+			if err != nil {
+				continue
+			}
+		}
+		if !fi.Mode().IsRegular() {
+			continue
+		}
+		fullpath := filepath.Join(configDir, fi.Name())
+		data, err := ioutil.ReadFile(fullpath)
+		if err != nil {
+			return errors.Wrapf(err, "failed read config file: %v", fullpath)
+		}
+		if ext == ".conf" {
+			acl, err := loadAclFromFile(data)
+			if err != nil {
+				return errors.Wrapf(err, "error in acl file: %v", fullpath)
+			}
+			acls = append(acls, *acl)
+			log.Println("reloaded config file", fullpath)
+		}
+	}
+	proxy.Acls = acls
+	return nil
+}

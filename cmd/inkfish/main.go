@@ -163,6 +163,19 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
+	go func() {
+	    for {
+	        if err := proxy.ReloadAclsFromDirectory(*configDir); err != nil {
+	            log.Println("error: proxy reload ACLs: %v", err)
+	        }
+	        time.Sleep(60)
+	    }
+	}()
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt)
+	signal.Notify(done, syscall.SIGTERM)
+	<-done
+
 	log.Println("listen address: ", *addr)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		// Error starting or closing listener:
