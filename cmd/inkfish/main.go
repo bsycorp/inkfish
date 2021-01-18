@@ -55,6 +55,17 @@ func main() {
 	if err != nil {
 		log.Fatal("config error: ", err)
 	}
+	ticker := time.NewTicker(1 * time.Second)
+    go func() {
+        for range ticker.C {
+            err := proxy.ReloadAclsFromDirectory(*configDir)
+            if err != nil {
+                log.Fatal("reload config error: ", err)
+            }
+        }
+    }()
+    time.Sleep(60 *time.Second)
+    ticker.Stop()
 	// Testmode
 	if *insecureTestMode {
 		log.Println("WARNING: PROXY IS IN TEST MODE, REQUESTS WILL NOT BE BLOCKED")
