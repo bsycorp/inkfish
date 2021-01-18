@@ -3,8 +3,14 @@ package inkfish
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -32,6 +38,11 @@ type AclEntry struct {
 type UserEntry struct {
 	Username     string
 	PasswordHash string
+}
+
+type ConfigItem struct {
+	ConfigName string
+	ConfigBody string
 }
 
 func listContainsString(haystack []string, needle string) bool {
@@ -325,5 +336,49 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 			log.Println("loaded passwd file:", fullpath)
 		}
 	}
+	return nil
+}
+
+func (proxy *Inkfish) ReloadAclsFromDyanmoDB(sess *session.Session, tableName string) error {
+	svc := dynamodb.New(sess)
+	acls := []Acl{}
+	proj := expression.NamesList(
+		expression.Name("ConfigName"),
+		expression.Name("ConfigBody"),
+	)
+	expr, err := expression.NewBuilder().WithProjection(proj).Build()
+	params := &dynamodb.ScanInput{
+		ConsistentRead:            aws.Bool(true),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression:          expr.Filter(),
+		ProjectionExpression:      expr.Projection(),
+		TableName:                 aws.String(tableName),
+	}
+	result, err := svc.Scan(params)
+	if err != nil {
+		msg := fmt.Sprintf("failed to scan dynamodb table: %v", tableName)
+		return errors.Wrap(err, msg)
+	}
+	for _, i := range result.Items {
+		item := ConfigItem{}
+		err = dynamodbattribute.UnmarshalMap(i, &item)
+		if err != nil {
+			msg := "Got error unmarshalling"
+			return errors.Wrap(err, msg)
+		}
+		config, err := base64.StdEncoding.DecodeString(item.ConfigBody)
+		if err != nil {
+			msg := "Got error decoding config"
+			return errors.Wrap(err, msg)
+		}
+		acl, err := loadAclFromFile(config)
+		if err != nil {
+			return errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
+		}
+		acls = append(acls, *acl)
+		log.Println("reloaded config item from dynamodb", item.ConfigName)
+	}
+	proxy.Acls = acls
 	return nil
 }

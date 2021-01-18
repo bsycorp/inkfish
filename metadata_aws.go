@@ -107,3 +107,22 @@ func getInstancePrimaryIP(sess *session.Session, instanceId string) (string, err
 	}
 	return "", errors.Errorf("failed to find private IP for instance: %v", instanceId)
 }
+
+func GetInstanceEnvTag(sess *session.Session) (string, error) {
+	svc := ec2.New(sess)
+	var input ec2.DescribeInstancesInput
+	output, err := svc.DescribeInstances(&input)
+	if err != nil {
+		return "", errors.Wrap(err, "describe instance failed")
+	}
+	for _, res := range output.Reservations {
+		for _, inst := range res.Instances {
+			for _, tag := range inst.Tags {
+				if *tag.Key == "Env" {
+					return *tag.Value, nil
+				}
+			}
+		}
+	}
+	return "", errors.Errorf("failed to find Env tag")
+}
