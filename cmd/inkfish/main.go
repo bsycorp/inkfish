@@ -55,6 +55,15 @@ func main() {
 	if err != nil {
 		log.Fatal("config error: ", err)
 	}
+
+	go func() {
+        for {
+            log.Println("Reload proxy ACLs")
+            proxy.ReloadAclsFromDirectory(*configDir)
+            time.Sleep(60 * time.Second)
+        }
+    }()
+
 	// Testmode
 	if *insecureTestMode {
 		log.Println("WARNING: PROXY IS IN TEST MODE, REQUESTS WILL NOT BE BLOCKED")
@@ -162,19 +171,6 @@ func main() {
 		}
 		close(idleConnsClosed)
 	}()
-
-	go func() {
-	    for {
-	        if err := proxy.ReloadAclsFromDirectory(*configDir); err != nil {
-	            log.Println("error: proxy reload ACLs: %v", err)
-	        }
-	        time.Sleep(60)
-	    }
-	}()
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt)
-	signal.Notify(done, syscall.SIGTERM)
-	<-done
 
 	log.Println("listen address: ", *addr)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
