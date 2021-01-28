@@ -288,13 +288,15 @@ func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 	return result, nil
 }
 
-func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
+func (proxy *Inkfish) LoadConfigFromDirectory(configDir string, reload ...string) error {
 	// Load ACLs and passwd entries from a directory
 	files, err := ioutil.ReadDir(configDir)
 	if err != nil {
 		msg := fmt.Sprintf("failed to list config dir: %v", configDir)
 		return errors.Wrap(err, msg)
 	}
+	acls := []Acl{}
+	passwd := []UserEntry{}
 	for _, fi := range files {
 		ext := filepath.Ext(fi.Name())
 		if ext != ".conf" && ext != ".passwd" {
@@ -325,23 +327,36 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 			if err != nil {
 				return errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
-			proxy.Acls = append(proxy.Acls, *acl)
-			log.Println("loaded config file", fullpath)
+			if len(reload) > 0 {
+				acls = append(acls, *acl)
+				log.Println("reloaded config file", fullpath)
+			} else {
+				proxy.Acls = append(proxy.Acls, *acl)
+				log.Println("loaded config file", fullpath)
+			}
 		} else if ext == ".passwd" {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}
-			proxy.Passwd = append(proxy.Passwd, userRecords...)
-			log.Println("loaded passwd file:", fullpath)
+			if len(reload) > 0 {
+				passwd = append(passwd, userRecords...)
+				log.Println("reloaded passwd file:", fullpath)
+			} else {
+				proxy.Passwd = append(proxy.Passwd, userRecords...)
+				log.Println("loaded passwd file:", fullpath)
+			}
 		}
+	}
+	if len(reload) > 0 {
+		proxy.Acls = acls
+		proxy.Passwd = passwd
 	}
 	return nil
 }
 
-func (proxy *Inkfish) ReloadAclsFromDyanmoDB(sess *session.Session, tableName string) error {
+func (proxy *Inkfish) LoadConfigFromDyanmoDB(sess *session.Session, ddbConfig string) error {
 	svc := dynamodb.New(sess)
-	acls := []Acl{}
 	proj := expression.NamesList(
 		expression.Name("ConfigName"),
 		expression.Name("ConfigBody"),
@@ -353,13 +368,15 @@ func (proxy *Inkfish) ReloadAclsFromDyanmoDB(sess *session.Session, tableName st
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
 		ProjectionExpression:      expr.Projection(),
-		TableName:                 aws.String(tableName),
+		TableName:                 aws.String(ddbConfig),
 	}
 	result, err := svc.Scan(params)
 	if err != nil {
-		msg := fmt.Sprintf("failed to scan dynamodb table: %v", tableName)
+		msg := fmt.Sprintf("failed to scan dynamodb table: %v", ddbConfig)
 		return errors.Wrap(err, msg)
 	}
+	acls := []Acl{}
+	passwd := []UserEntry{}
 	for _, i := range result.Items {
 		item := ConfigItem{}
 		err = dynamodbattribute.UnmarshalMap(i, &item)
@@ -367,18 +384,28 @@ func (proxy *Inkfish) ReloadAclsFromDyanmoDB(sess *session.Session, tableName st
 			msg := "Got error unmarshalling"
 			return errors.Wrap(err, msg)
 		}
-		config, err := base64.StdEncoding.DecodeString(item.ConfigBody)
+		data, err := base64.StdEncoding.DecodeString(item.ConfigBody)
 		if err != nil {
 			msg := "Got error decoding config"
 			return errors.Wrap(err, msg)
 		}
-		acl, err := loadAclFromFile(config)
-		if err != nil {
-			return errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
+		if strings.HasSuffix(item.ConfigName, ".conf") {
+			acl, err := loadAclFromFile(data)
+			if err != nil {
+				return errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
+			}
+			acls = append(acls, *acl)
+			log.Println("reloaded config item from dynamodb", item.ConfigName)
+		} else if strings.HasSuffix(item.ConfigName, ".passwd") {
+			userRecords, err := loadUsersFromFile(data)
+			if err != nil {
+				return errors.Wrapf(err, "error in passwd file: %v", item.ConfigName)
+			}
+			passwd = append(passwd, userRecords...)
+			log.Println("reloaded passwd file:", item.ConfigName)
 		}
-		acls = append(acls, *acl)
-		log.Println("reloaded config item from dynamodb", item.ConfigName)
 	}
 	proxy.Acls = acls
+	proxy.Passwd = passwd
 	return nil
 }

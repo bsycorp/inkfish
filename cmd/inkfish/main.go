@@ -35,7 +35,7 @@ func main() {
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 	drainTime := flag.Int64("drain-time", 30, "shutdown drain deadline (seconds)")
 	connectPorts := flag.String("connect-ports", "443", "comma delimited list of valid CONNECT ports")
-	aclsTableNamePostfix := flag.String("aclsTableNamePostfix", "-proxy-rules", "name postfix of dynamodb table of proxy rules")
+	ddbConfig := flag.String("ddb-config", "", "name of dynamodb table of proxy rules")
 
 	flag.Parse()
 
@@ -57,23 +57,27 @@ func main() {
 		log.Fatal("config error: ", err)
 	}
 
-	sess, err := session.NewSession()
-	if err != nil {
-		log.Fatal("failed to create aws session: ", err)
-	}
-
-	envTag, err := inkfish.GetInstanceEnvTag(sess)
-	if err != nil {
-		log.Fatal("failed to retrieve Env setting: ", err)
-	}
-	tableName := envTag + *aclsTableNamePostfix
-	go func() {
-		for {
-			log.Println("Reload proxy ACLs")
-			proxy.ReloadAclsFromDyanmoDB(sess, tableName)
-			time.Sleep(60 * time.Second)
+	if *ddbConfig != "" {
+		sess, err := session.NewSession()
+		if err != nil {
+			log.Fatal("failed to create aws session: ", err)
 		}
-	}()
+		go func() {
+			for {
+				log.Println("Reload proxy ACLs from DynamoDB")
+				proxy.LoadConfigFromDyanmoDB(sess, *ddbConfig)
+				time.Sleep(60 * time.Second)
+			}
+		}()
+	} else {
+		go func() {
+			for {
+				log.Println("Reload proxy ACLs from local config directory")
+				proxy.LoadConfigFromDirectory(*configDir, "reload")
+				time.Sleep(60 * time.Second)
+			}
+		}()
+	}
 
 	// Testmode
 	if *insecureTestMode {
@@ -106,6 +110,10 @@ func main() {
 	}
 	if *metadataFrom == "aws" {
 		log.Println("using AWS metadata provider")
+		sess, err := session.NewSession()
+		if err != nil {
+			log.Fatal("failed to create aws session: ", err)
+		}
 		// Do an inital metadata update before listening
 		inkfish.UpdateMetadataFromAWS(sess, metadataCache)
 		go func() {
