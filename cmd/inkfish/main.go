@@ -60,7 +60,7 @@ func main() {
 	if *ddbConfig != "" {
 		sess, err := session.NewSession()
 		if err != nil {
-			log.Fatal("failed to create aws session: ", err)
+			log.Fatal("failed to create aws session for proxy config reload from dynamodb: ", err)
 		}
 		go func() {
 			for {
@@ -112,7 +112,7 @@ func main() {
 		log.Println("using AWS metadata provider")
 		sess, err := session.NewSession()
 		if err != nil {
-			log.Fatal("failed to create aws session: ", err)
+			log.Fatal("failed to create aws session for metadata update: ", err)
 		}
 		// Do an inital metadata update before listening
 		inkfish.UpdateMetadataFromAWS(sess, metadataCache)
