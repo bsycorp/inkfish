@@ -65,7 +65,10 @@ func main() {
 		go func() {
 			for {
 				log.Println("Reload proxy ACLs from DynamoDB")
-				proxy.LoadConfigFromDyanmoDB(sess, *ddbConfig)
+				err := proxy.LoadConfigFromDynamoDB(sess, *ddbConfig)
+				if err != nil {
+					log.Println("error reloading config: ", err)
+				}
 				time.Sleep(60 * time.Second)
 			}
 		}()
@@ -73,7 +76,10 @@ func main() {
 		go func() {
 			for {
 				log.Println("Reload proxy ACLs from local config directory")
-				proxy.LoadConfigFromDirectory(*configDir, "reload")
+				err := proxy.LoadConfigFromDirectory(*configDir, "reload")
+				if err != nil {
+					log.Println("error reloading config: ", err)
+				}
 				time.Sleep(60 * time.Second)
 			}
 		}()

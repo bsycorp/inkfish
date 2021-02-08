@@ -327,41 +327,39 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string, reload ...string
 			if err != nil {
 				return errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
-			if len(reload) > 0 {
-				acls = append(acls, *acl)
-				log.Println("reloaded config file", fullpath)
-			} else {
-				proxy.Acls = append(proxy.Acls, *acl)
-				log.Println("loaded config file", fullpath)
-			}
+			acls = append(acls, *acl)
+			log.Println("loaded config file:", fullpath)
 		} else if ext == ".passwd" {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}
-			if len(reload) > 0 {
-				passwd = append(passwd, userRecords...)
-				log.Println("reloaded passwd file:", fullpath)
-			} else {
-				proxy.Passwd = append(proxy.Passwd, userRecords...)
-				log.Println("loaded passwd file:", fullpath)
-			}
+			passwd = append(proxy.Passwd, userRecords...)
+			log.Println("loaded passwd file:", fullpath)
 		}
 	}
-	if len(reload) > 0 {
-		proxy.Acls = acls
-		proxy.Passwd = passwd
-	}
+	proxy.ReplaceConfig(acls, passwd)
 	return nil
 }
 
-func (proxy *Inkfish) LoadConfigFromDyanmoDB(sess *session.Session, ddbConfig string) error {
+func (proxy *Inkfish) ReplaceConfig(acls []Acl, passwd []UserEntry) {
+	proxy.configMutex.Lock()
+	defer proxy.configMutex.Unlock()
+
+	proxy.Acls = acls
+	proxy.Passwd = passwd
+}
+
+func (proxy *Inkfish) LoadConfigFromDynamoDB(sess *session.Session, ddbConfig string) error {
 	svc := dynamodb.New(sess)
 	proj := expression.NamesList(
 		expression.Name("ConfigName"),
 		expression.Name("ConfigBody"),
 	)
 	expr, err := expression.NewBuilder().WithProjection(proj).Build()
+	if err != nil {
+		panic(err)
+	}
 	params := &dynamodb.ScanInput{
 		ConsistentRead:            aws.Bool(true),
 		ExpressionAttributeNames:  expr.Names(),
@@ -395,17 +393,16 @@ func (proxy *Inkfish) LoadConfigFromDyanmoDB(sess *session.Session, ddbConfig st
 				return errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
 			}
 			acls = append(acls, *acl)
-			log.Println("reloaded config item from dynamodb", item.ConfigName)
+			log.Println("loaded config item from dynamodb", item.ConfigName)
 		} else if strings.HasSuffix(item.ConfigName, ".passwd") {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
 				return errors.Wrapf(err, "error in passwd file: %v", item.ConfigName)
 			}
 			passwd = append(passwd, userRecords...)
-			log.Println("reloaded passwd file:", item.ConfigName)
+			log.Println("loaded passwd file:", item.ConfigName)
 		}
 	}
-	proxy.Acls = acls
-	proxy.Passwd = passwd
+	proxy.ReplaceConfig(acls, passwd)
 	return nil
 }
