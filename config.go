@@ -288,12 +288,40 @@ func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 	return result, nil
 }
 
-func (proxy *Inkfish) LoadConfigFromDirectory(configDir string, reload ...string) error {
+func (proxy *Inkfish) LoadConfig(configDir string, configDdb string) error {
+    acls := []Acl{}
+	passwd := []UserEntry{}
+	errstrings :=  []string{}
+    localAcls, localPasswd, err  := LoadConfigFromDirectory(configDir)
+	if err != nil {
+	    errstrings = append(errstrings, err.Error())
+	} else {
+	    acls = append(acls, localAcls...)
+	    passwd = append(passwd, localPasswd...)
+	}
+	if configDdb != "" {
+	    ddbAcls, ddbPasswd, err := LoadConfigFromDynamoDB(configDdb)
+        if err != nil {
+            errstrings = append(errstrings, err.Error())
+        } else {
+            acls = append(acls, ddbAcls...)
+            passwd = append(passwd, ddbPasswd...)
+        }
+	}
+	if len(errstrings) > 0 {
+	    msg := fmt.Sprintf("Load proxy configuration reported error(s):\n - %s", strings.Join(errstrings, "\n - "))
+	    return errors.Errorf(msg)
+	}
+	proxy.ReplaceConfig(acls, passwd)
+	return nil
+}
+
+func LoadConfigFromDirectory(configDir string) ([]Acl, []UserEntry, error) {
 	// Load ACLs and passwd entries from a directory
 	files, err := ioutil.ReadDir(configDir)
 	if err != nil {
 		msg := fmt.Sprintf("failed to list config dir: %v", configDir)
-		return errors.Wrap(err, msg)
+		return nil, nil, errors.Wrap(err, msg)
 	}
 	acls := []Acl{}
 	passwd := []UserEntry{}
@@ -320,26 +348,25 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string, reload ...string
 		fullpath := filepath.Join(configDir, fi.Name())
 		data, err := ioutil.ReadFile(fullpath)
 		if err != nil {
-			return errors.Wrapf(err, "failed read config file: %v", fullpath)
+			return nil, nil, errors.Wrapf(err, "failed read config file: %v", fullpath)
 		}
 		if ext == ".conf" {
 			acl, err := loadAclFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in acl file: %v", fullpath)
+				return nil, nil, errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
 			acls = append(acls, *acl)
 			log.Println("loaded config file:", fullpath)
 		} else if ext == ".passwd" {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
+				return nil, nil, errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}
-			passwd = append(proxy.Passwd, userRecords...)
+			passwd = append(passwd, userRecords...)
 			log.Println("loaded passwd file:", fullpath)
 		}
 	}
-	proxy.ReplaceConfig(acls, passwd)
-	return nil
+	return acls, passwd, nil
 }
 
 func (proxy *Inkfish) ReplaceConfig(acls []Acl, passwd []UserEntry) {
@@ -350,7 +377,8 @@ func (proxy *Inkfish) ReplaceConfig(acls []Acl, passwd []UserEntry) {
 	proxy.Passwd = passwd
 }
 
-func (proxy *Inkfish) LoadConfigFromDynamoDB(sess *session.Session, ddbConfig string) error {
+func LoadConfigFromDynamoDB(configDdb string) ([]Acl, []UserEntry, error) {
+    sess, err := session.NewSession()
 	svc := dynamodb.New(sess)
 	proj := expression.NamesList(
 		expression.Name("ConfigName"),
@@ -366,12 +394,12 @@ func (proxy *Inkfish) LoadConfigFromDynamoDB(sess *session.Session, ddbConfig st
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
 		ProjectionExpression:      expr.Projection(),
-		TableName:                 aws.String(ddbConfig),
+		TableName:                 aws.String(configDdb),
 	}
 	result, err := svc.Scan(params)
 	if err != nil {
-		msg := fmt.Sprintf("failed to scan dynamodb table: %v", ddbConfig)
-		return errors.Wrap(err, msg)
+		msg := fmt.Sprintf("failed to scan dynamodb table: %v", configDdb)
+		return nil, nil, errors.Wrap(err, msg)
 	}
 	acls := []Acl{}
 	passwd := []UserEntry{}
@@ -380,29 +408,28 @@ func (proxy *Inkfish) LoadConfigFromDynamoDB(sess *session.Session, ddbConfig st
 		err = dynamodbattribute.UnmarshalMap(i, &item)
 		if err != nil {
 			msg := "Got error unmarshalling"
-			return errors.Wrap(err, msg)
+			return nil, nil, errors.Wrap(err, msg)
 		}
 		data, err := base64.StdEncoding.DecodeString(item.ConfigBody)
 		if err != nil {
 			msg := "Got error decoding config"
-			return errors.Wrap(err, msg)
+			return nil, nil, errors.Wrap(err, msg)
 		}
 		if strings.HasSuffix(item.ConfigName, ".conf") {
 			acl, err := loadAclFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
+				return nil, nil, errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
 			}
 			acls = append(acls, *acl)
 			log.Println("loaded config item from dynamodb", item.ConfigName)
 		} else if strings.HasSuffix(item.ConfigName, ".passwd") {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in passwd file: %v", item.ConfigName)
+				return nil, nil, errors.Wrapf(err, "error in passwd file: %v", item.ConfigName)
 			}
 			passwd = append(passwd, userRecords...)
 			log.Println("loaded passwd file:", item.ConfigName)
 		}
 	}
-	proxy.ReplaceConfig(acls, passwd)
-	return nil
+	return acls, passwd, nil
 }

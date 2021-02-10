@@ -35,7 +35,7 @@ func main() {
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 	drainTime := flag.Int64("drain-time", 30, "shutdown drain deadline (seconds)")
 	connectPorts := flag.String("connect-ports", "443", "comma delimited list of valid CONNECT ports")
-	ddbConfig := flag.String("ddb-config", "", "name of dynamodb table of proxy rules")
+	configDdb := flag.String("ddb-config", "", "name of dynamodb table of proxy rules")
 
 	flag.Parse()
 
@@ -52,38 +52,17 @@ func main() {
 	if err != nil {
 		log.Fatal("error loading CA config: ", err)
 	}
-	err = proxy.LoadConfigFromDirectory(*configDir)
-	if err != nil {
-		log.Fatal("config error: ", err)
-	}
 
-	if *ddbConfig != "" {
-		sess, err := session.NewSession()
-		if err != nil {
-			log.Fatal("failed to create aws session for proxy config reload from dynamodb: ", err)
+	go func() {
+		for {
+			log.Println("Load proxy configurations")
+			err = proxy.LoadConfig(*configDir, *configDdb)
+			if err != nil {
+				log.Fatal("config error: ", err)
+			}
+			time.Sleep(60 * time.Second)
 		}
-		go func() {
-			for {
-				log.Println("Reload proxy ACLs from DynamoDB")
-				err := proxy.LoadConfigFromDynamoDB(sess, *ddbConfig)
-				if err != nil {
-					log.Println("error reloading config: ", err)
-				}
-				time.Sleep(60 * time.Second)
-			}
-		}()
-	} else {
-		go func() {
-			for {
-				log.Println("Reload proxy ACLs from local config directory")
-				err := proxy.LoadConfigFromDirectory(*configDir, "reload")
-				if err != nil {
-					log.Println("error reloading config: ", err)
-				}
-				time.Sleep(60 * time.Second)
-			}
-		}()
-	}
+	}()
 
 	// Testmode
 	if *insecureTestMode {
