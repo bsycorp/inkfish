@@ -230,9 +230,9 @@ func TestAclConfigWithMissingPortInBypass(t *testing.T) {
 	assert.Equal(t, "missing port in bypass at line: 5", err.Error())
 }
 
-func TestLoadConfig(t *testing.T) {
+func TestLoadConfigFromLocalDirOnly(t *testing.T) {
 	proxy := NewInkfish(NewCertSigner(&StubCA))
-	err := proxy.LoadConfigFromDirectory("testdata/unit_test_config")
+	err := proxy.LoadConfig("testdata/unit_test_config", "")
 	assert.NotNil(t, proxy.Acls)
 	assert.Nil(t, err)
 
@@ -241,9 +241,26 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadConfigWithSymlink(t *testing.T) {
 	proxy := NewInkfish(NewCertSigner(&StubCA))
-	err := proxy.LoadConfigFromDirectory("testdata/symlink_test_config")
+	err := proxy.LoadConfig("testdata/symlink_test_config", "")
 	assert.NotNil(t, proxy.Acls)
 	assert.Nil(t, err)
 
 	assert.Equal(t, 2, len(proxy.Acls))
+}
+
+func TestLoadConfigFromLocalDirFails(t *testing.T) {
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	err := proxy.LoadConfig("dir-does-not-exist/nofile", "")
+	assert.Nil(t, proxy.Acls)
+	assert.NotNil(t, err)
+
+	assert.Equal(t, 0, len(proxy.Acls))
+}
+
+func TestLoadEmptyConfig(t *testing.T) {
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	err := proxy.LoadConfig(".", "")
+	assert.Nil(t, err)
+
+	assert.Equal(t, 0, len(proxy.Acls))
 }

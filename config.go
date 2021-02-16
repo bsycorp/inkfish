@@ -3,8 +3,14 @@ package inkfish
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -32,6 +38,11 @@ type AclEntry struct {
 type UserEntry struct {
 	Username     string
 	PasswordHash string
+}
+
+type ConfigItem struct {
+	ConfigName string
+	ConfigBody string
 }
 
 func listContainsString(haystack []string, needle string) bool {
@@ -277,13 +288,43 @@ func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 	return result, nil
 }
 
-func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
+func (proxy *Inkfish) LoadConfig(configDir string, configDdb string) error {
+	acls := []Acl{}
+	passwd := []UserEntry{}
+	errstrings := []string{}
+	localAcls, localPasswd, err := LoadConfigFromDirectory(configDir)
+	if err != nil {
+		errstrings = append(errstrings, err.Error())
+	} else {
+		acls = append(acls, localAcls...)
+		passwd = append(passwd, localPasswd...)
+	}
+	if configDdb != "" {
+		ddbAcls, ddbPasswd, err := LoadConfigFromDynamoDB(configDdb)
+		if err != nil {
+			errstrings = append(errstrings, err.Error())
+		} else {
+			acls = append(acls, ddbAcls...)
+			passwd = append(passwd, ddbPasswd...)
+		}
+	}
+	if len(errstrings) > 0 {
+		msg := fmt.Sprintf("Load proxy configuration reported error(s):\n - %s", strings.Join(errstrings, "\n - "))
+		return errors.Errorf(msg)
+	}
+	proxy.ReplaceConfig(acls, passwd)
+	return nil
+}
+
+func LoadConfigFromDirectory(configDir string) ([]Acl, []UserEntry, error) {
 	// Load ACLs and passwd entries from a directory
 	files, err := ioutil.ReadDir(configDir)
 	if err != nil {
 		msg := fmt.Sprintf("failed to list config dir: %v", configDir)
-		return errors.Wrap(err, msg)
+		return nil, nil, errors.Wrap(err, msg)
 	}
+	acls := []Acl{}
+	passwd := []UserEntry{}
 	for _, fi := range files {
 		ext := filepath.Ext(fi.Name())
 		if ext != ".conf" && ext != ".passwd" {
@@ -307,23 +348,118 @@ func (proxy *Inkfish) LoadConfigFromDirectory(configDir string) error {
 		fullpath := filepath.Join(configDir, fi.Name())
 		data, err := ioutil.ReadFile(fullpath)
 		if err != nil {
-			return errors.Wrapf(err, "failed read config file: %v", fullpath)
+			return nil, nil, errors.Wrapf(err, "failed read config file: %v", fullpath)
 		}
 		if ext == ".conf" {
 			acl, err := loadAclFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in acl file: %v", fullpath)
+				return nil, nil, errors.Wrapf(err, "error in acl file: %v", fullpath)
 			}
-			proxy.Acls = append(proxy.Acls, *acl)
-			log.Println("loaded config file", fullpath)
+			acls = append(acls, *acl)
+			log.Println("loaded config file:", fullpath)
 		} else if ext == ".passwd" {
 			userRecords, err := loadUsersFromFile(data)
 			if err != nil {
-				return errors.Wrapf(err, "error in passwd file: %v", fullpath)
+				return nil, nil, errors.Wrapf(err, "error in passwd file: %v", fullpath)
 			}
-			proxy.Passwd = append(proxy.Passwd, userRecords...)
+			passwd = append(passwd, userRecords...)
 			log.Println("loaded passwd file:", fullpath)
 		}
 	}
-	return nil
+	return acls, passwd, nil
+}
+
+func (proxy *Inkfish) ReplaceConfig(acls []Acl, passwd []UserEntry) {
+	proxy.configMutex.Lock()
+	defer proxy.configMutex.Unlock()
+
+	proxy.Acls = acls
+	proxy.Passwd = passwd
+}
+
+func LoadConfigFromDynamoDB(configDdb string) ([]Acl, []UserEntry, error) {
+	sess, err := session.NewSession()
+	svc := dynamodb.New(sess)
+	ddbTables, err := ListDDBProxyTables(sess, configDdb)
+	if err != nil {
+		msg := fmt.Sprintf("failed to list dynamodb proxy rules tables")
+		return nil, nil, errors.Wrap(err, msg)
+	}
+	proj := expression.NamesList(
+		expression.Name("ConfigName"),
+		expression.Name("ConfigBody"),
+	)
+	expr, err := expression.NewBuilder().WithProjection(proj).Build()
+	if err != nil {
+		panic(err)
+	}
+	acls := []Acl{}
+	passwd := []UserEntry{}
+	for _, t := range ddbTables {
+		params := &dynamodb.ScanInput{
+			ConsistentRead:            aws.Bool(true),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			FilterExpression:          expr.Filter(),
+			ProjectionExpression:      expr.Projection(),
+			TableName:                 aws.String(t),
+		}
+		result, err := svc.Scan(params)
+		if err != nil {
+			msg := fmt.Sprintf("failed to scan dynamodb table: %v", t)
+			return nil, nil, errors.Wrap(err, msg)
+		}
+		for _, i := range result.Items {
+			item := ConfigItem{}
+			err = dynamodbattribute.UnmarshalMap(i, &item)
+			if err != nil {
+				msg := "Got error unmarshalling"
+				return nil, nil, errors.Wrap(err, msg)
+			}
+			data, err := base64.StdEncoding.DecodeString(item.ConfigBody)
+			if err != nil {
+				msg := "Got error decoding config"
+				return nil, nil, errors.Wrap(err, msg)
+			}
+			if strings.HasSuffix(item.ConfigName, ".conf") {
+				acl, err := loadAclFromFile(data)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "error in acl [%v] from dynamodb table [%v]", item.ConfigName, t)
+				}
+				acls = append(acls, *acl)
+				log.Printf("loaded acl [%v] from dynamodb table [%v]", item.ConfigName, t)
+			} else if strings.HasSuffix(item.ConfigName, ".passwd") {
+				userRecords, err := loadUsersFromFile(data)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "error in passwd [%v] from dynamodb table [%v]", item.ConfigName, t)
+				}
+				passwd = append(passwd, userRecords...)
+				log.Printf("loaded passwd [%v] from dynamodb table [%v]", item.ConfigName, t)
+			}
+		}
+	}
+	return acls, passwd, nil
+}
+
+func ListDDBProxyTables(sess *session.Session, tableNameRegex string) ([]string, error) {
+	svc := dynamodb.New(sess)
+	input := &dynamodb.ListTablesInput{}
+	tableNames := []string{}
+	for {
+		result, err := svc.ListTables(input)
+		if err != nil {
+			return nil, err
+		}
+		validID := regexp.MustCompile(tableNameRegex)
+		for _, n := range result.TableNames {
+			if validID.MatchString(*n) {
+				tableNames = append(tableNames, *n)
+			}
+		}
+		input.ExclusiveStartTableName = result.LastEvaluatedTableName
+		if result.LastEvaluatedTableName == nil {
+			break
+		}
+	}
+	return tableNames, nil
 }
