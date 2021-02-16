@@ -289,28 +289,28 @@ func loadUsersFromFile(data []byte) ([]UserEntry, error) {
 }
 
 func (proxy *Inkfish) LoadConfig(configDir string, configDdb string) error {
-    acls := []Acl{}
+	acls := []Acl{}
 	passwd := []UserEntry{}
-	errstrings :=  []string{}
-    localAcls, localPasswd, err  := LoadConfigFromDirectory(configDir)
+	errstrings := []string{}
+	localAcls, localPasswd, err := LoadConfigFromDirectory(configDir)
 	if err != nil {
-	    errstrings = append(errstrings, err.Error())
+		errstrings = append(errstrings, err.Error())
 	} else {
-	    acls = append(acls, localAcls...)
-	    passwd = append(passwd, localPasswd...)
+		acls = append(acls, localAcls...)
+		passwd = append(passwd, localPasswd...)
 	}
 	if configDdb != "" {
-	    ddbAcls, ddbPasswd, err := LoadConfigFromDynamoDB(configDdb)
-        if err != nil {
-            errstrings = append(errstrings, err.Error())
-        } else {
-            acls = append(acls, ddbAcls...)
-            passwd = append(passwd, ddbPasswd...)
-        }
+		ddbAcls, ddbPasswd, err := LoadConfigFromDynamoDB(configDdb)
+		if err != nil {
+			errstrings = append(errstrings, err.Error())
+		} else {
+			acls = append(acls, ddbAcls...)
+			passwd = append(passwd, ddbPasswd...)
+		}
 	}
 	if len(errstrings) > 0 {
-	    msg := fmt.Sprintf("Load proxy configuration reported error(s):\n - %s", strings.Join(errstrings, "\n - "))
-	    return errors.Errorf(msg)
+		msg := fmt.Sprintf("Load proxy configuration reported error(s):\n - %s", strings.Join(errstrings, "\n - "))
+		return errors.Errorf(msg)
 	}
 	proxy.ReplaceConfig(acls, passwd)
 	return nil
@@ -378,8 +378,13 @@ func (proxy *Inkfish) ReplaceConfig(acls []Acl, passwd []UserEntry) {
 }
 
 func LoadConfigFromDynamoDB(configDdb string) ([]Acl, []UserEntry, error) {
-    sess, err := session.NewSession()
+	sess, err := session.NewSession()
 	svc := dynamodb.New(sess)
+	ddbTables, err := ListDDBProxyTables(sess, configDdb)
+	if err != nil {
+		msg := fmt.Sprintf("failed to list dynamodb proxy rules tables")
+		return nil, nil, errors.Wrap(err, msg)
+	}
 	proj := expression.NamesList(
 		expression.Name("ConfigName"),
 		expression.Name("ConfigBody"),
@@ -388,48 +393,73 @@ func LoadConfigFromDynamoDB(configDdb string) ([]Acl, []UserEntry, error) {
 	if err != nil {
 		panic(err)
 	}
-	params := &dynamodb.ScanInput{
-		ConsistentRead:            aws.Bool(true),
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
-		ProjectionExpression:      expr.Projection(),
-		TableName:                 aws.String(configDdb),
-	}
-	result, err := svc.Scan(params)
-	if err != nil {
-		msg := fmt.Sprintf("failed to scan dynamodb table: %v", configDdb)
-		return nil, nil, errors.Wrap(err, msg)
-	}
 	acls := []Acl{}
 	passwd := []UserEntry{}
-	for _, i := range result.Items {
-		item := ConfigItem{}
-		err = dynamodbattribute.UnmarshalMap(i, &item)
+	for _, t := range ddbTables {
+		params := &dynamodb.ScanInput{
+			ConsistentRead:            aws.Bool(true),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			FilterExpression:          expr.Filter(),
+			ProjectionExpression:      expr.Projection(),
+			TableName:                 aws.String(t),
+		}
+		result, err := svc.Scan(params)
 		if err != nil {
-			msg := "Got error unmarshalling"
+			msg := fmt.Sprintf("failed to scan dynamodb table: %v", t)
 			return nil, nil, errors.Wrap(err, msg)
 		}
-		data, err := base64.StdEncoding.DecodeString(item.ConfigBody)
-		if err != nil {
-			msg := "Got error decoding config"
-			return nil, nil, errors.Wrap(err, msg)
-		}
-		if strings.HasSuffix(item.ConfigName, ".conf") {
-			acl, err := loadAclFromFile(data)
+		for _, i := range result.Items {
+			item := ConfigItem{}
+			err = dynamodbattribute.UnmarshalMap(i, &item)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "error in acl file: %v", item.ConfigName)
+				msg := "Got error unmarshalling"
+				return nil, nil, errors.Wrap(err, msg)
 			}
-			acls = append(acls, *acl)
-			log.Println("loaded config item from dynamodb", item.ConfigName)
-		} else if strings.HasSuffix(item.ConfigName, ".passwd") {
-			userRecords, err := loadUsersFromFile(data)
+			data, err := base64.StdEncoding.DecodeString(item.ConfigBody)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "error in passwd file: %v", item.ConfigName)
+				msg := "Got error decoding config"
+				return nil, nil, errors.Wrap(err, msg)
 			}
-			passwd = append(passwd, userRecords...)
-			log.Println("loaded passwd file:", item.ConfigName)
+			if strings.HasSuffix(item.ConfigName, ".conf") {
+				acl, err := loadAclFromFile(data)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "error in acl [%v] from dynamodb table [%v]", item.ConfigName, t)
+				}
+				acls = append(acls, *acl)
+				log.Printf("loaded acl [%v] from dynamodb table [%v]", item.ConfigName, t)
+			} else if strings.HasSuffix(item.ConfigName, ".passwd") {
+				userRecords, err := loadUsersFromFile(data)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "error in passwd [%v] from dynamodb table [%v]", item.ConfigName, t)
+				}
+				passwd = append(passwd, userRecords...)
+				log.Printf("loaded passwd [%v] from dynamodb table [%v]", item.ConfigName, t)
+			}
 		}
 	}
 	return acls, passwd, nil
+}
+
+func ListDDBProxyTables(sess *session.Session, tableNameRegex string) ([]string, error) {
+	svc := dynamodb.New(sess)
+	input := &dynamodb.ListTablesInput{}
+	tableNames := []string{}
+	for {
+		result, err := svc.ListTables(input)
+		if err != nil {
+			return nil, err
+		}
+		validID := regexp.MustCompile(tableNameRegex)
+		for _, n := range result.TableNames {
+			if validID.MatchString(*n) {
+				tableNames = append(tableNames, *n)
+			}
+		}
+		input.ExclusiveStartTableName = result.LastEvaluatedTableName
+		if result.LastEvaluatedTableName == nil {
+			break
+		}
+	}
+	return tableNames, nil
 }

@@ -249,36 +249,18 @@ func TestLoadConfigWithSymlink(t *testing.T) {
 }
 
 func TestLoadConfigFromLocalDirFails(t *testing.T) {
-    proxy := NewInkfish(NewCertSigner(&StubCA))
-    err := proxy.LoadConfig("dir-does-not-exist/nofile", "")
-    assert.Nil(t, proxy.Acls)
-    assert.NotNil(t, err)
-
-	assert.Equal(t, 0, len(proxy.Acls))
-}
-
-func TestLoadConfigFromDdbFails(t *testing.T) {
-    proxy := NewInkfish(NewCertSigner(&StubCA))
-    err := proxy.LoadConfig(".", "ddb-does-not-exist")
-    assert.Nil(t, proxy.Acls)
-    assert.NotNil(t, err)
-
-	assert.Equal(t, 0, len(proxy.Acls))
-}
-
-func TestLoadConfigMultipleFailures(t *testing.T) {
-    proxy := NewInkfish(NewCertSigner(&StubCA))
-    err := proxy.LoadConfig("dir-does-not-exist/nofile", "ddb-does-not-exist")
-    assert.Nil(t, proxy.Acls)
-    assert.NotNil(t, err)
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	err := proxy.LoadConfig("dir-does-not-exist/nofile", "")
+	assert.Nil(t, proxy.Acls)
+	assert.NotNil(t, err)
 
 	assert.Equal(t, 0, len(proxy.Acls))
 }
 
 func TestLoadEmptyConfig(t *testing.T) {
-    proxy := NewInkfish(NewCertSigner(&StubCA))
-    err := proxy.LoadConfig(".", "")
-    assert.Nil(t, err)
+	proxy := NewInkfish(NewCertSigner(&StubCA))
+	err := proxy.LoadConfig(".", "")
+	assert.Nil(t, err)
 
 	assert.Equal(t, 0, len(proxy.Acls))
 }
