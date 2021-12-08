@@ -2,6 +2,7 @@ FROM golang:1.11 AS build-env
 WORKDIR /src
 
 COPY go.mod go.sum /src/
+RUN apt-get --allow-releaseinfo-change update && apt upgrade -y
 RUN go mod download
 ADD . /src
 RUN make
