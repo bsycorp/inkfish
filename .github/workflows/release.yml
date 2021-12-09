@@ -2,6 +2,7 @@ name: Build
 
 on:
   create: # Triggers the workflow on new tag creation
+    tags:
   workflow_dispatch: # Allow manual trigger
 
 jobs:
