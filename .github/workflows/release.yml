@@ -17,7 +17,9 @@ jobs:
         DOCKER_CONTENT_TRUST=1 docker build . -f Dockerfile-slim -t bsycorp/inkfish:1.0.${{ github.run_number }}-slim
         docker create --name built bsycorp/inkfish:1.0.${{ github.run_number }}
         docker cp built:/app/inkfish inkfish-linux-amd64
-        bash ./scripts/docker-deploy.sh
+        docker tag  bsycorp/inkfish:1.0.${{ github.run_number }} bsycorp/inkfish:latest
+        docker tag  bsycorp/inkfish:1.0.${{ github.run_number }}-slim bsycorp/inkfish:latest-slim
+        docker push bsycorp/inkfish
     - name: Upload Release Asset
       uses: actions/upload-artifact@v2
       with:
