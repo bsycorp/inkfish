@@ -23,8 +23,10 @@ jobs:
         docker cp built:/app/inkfish inkfish-linux-amd64
         docker tag bsycorp/inkfish:${GITHUB_REF#refs/*/} bsycorp/inkfish:latest
         docker tag bsycorp/inkfish:${GITHUB_REF#refs/*/}-slim bsycorp/inkfish:latest-slim
-        docker push bsycorp/inkfish:${GITHUB_REF#refs/*/} bsycorp/inkfish:${GITHUB_REF#refs/*/}-slim
-        docker push bsycorp/inkfish:latest bsycorp/inkfish:latest-slim
+        docker push bsycorp/inkfish:${GITHUB_REF#refs/*/}
+        docker push bsycorp/inkfish:${GITHUB_REF#refs/*/}-slim
+        docker push bsycorp/inkfish:latest
+        docker push bsycorp/inkfish:latest-slim
     - name: Upload Release Asset
       uses: actions/upload-artifact@v2
       with:
