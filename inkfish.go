@@ -22,6 +22,7 @@ import (
 	"net/http/httputil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,6 +41,7 @@ type Metrics struct {
 type Inkfish struct {
 	Acls   []Acl
 	Passwd []UserEntry
+	configMutex sync.RWMutex
 
 	// Maintains an ip -> tag map, for access control based on instance metadata
 	MetadataProvider MetadataProvider
@@ -181,6 +183,9 @@ func (proxy *Inkfish) sendAccessDenied(w http.ResponseWriter, detail string) {
 }
 
 func (proxy *Inkfish) filterConnect(w http.ResponseWriter, req *http.Request) (action ConnectAction) {
+	proxy.configMutex.RLock()
+	defer proxy.configMutex.RUnlock()
+
 	host := req.Host
 
 	// Handle a CONNECT request
@@ -269,6 +274,9 @@ func (proxy *Inkfish) filterConnect(w http.ResponseWriter, req *http.Request) (a
 }
 
 func (proxy *Inkfish) filterRequest(connectReq *http.Request, scheme string, w http.ResponseWriter, req *http.Request) bool {
+	proxy.configMutex.RLock()
+	defer proxy.configMutex.RUnlock()
+
 	var user string
 	var err error
 	if scheme == "https" {

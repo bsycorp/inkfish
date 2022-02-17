@@ -35,6 +35,7 @@ func main() {
 	insecureTestMode := flag.Bool("insecure-test-mode", false, "test mode (does not block)")
 	drainTime := flag.Int64("drain-time", 30, "shutdown drain deadline (seconds)")
 	connectPorts := flag.String("connect-ports", "443", "comma delimited list of valid CONNECT ports")
+	configDdb := flag.String("ddb-config", "", "name of dynamodb table of proxy rules")
 
 	flag.Parse()
 
@@ -51,10 +52,18 @@ func main() {
 	if err != nil {
 		log.Fatal("error loading CA config: ", err)
 	}
-	err = proxy.LoadConfigFromDirectory(*configDir)
-	if err != nil {
-		log.Fatal("config error: ", err)
-	}
+
+	go func() {
+		for {
+			log.Println("Load proxy configurations")
+			err = proxy.LoadConfig(*configDir, *configDdb)
+			if err != nil {
+				log.Fatal("config error: ", err)
+			}
+			time.Sleep(60 * time.Second)
+		}
+	}()
+
 	// Testmode
 	if *insecureTestMode {
 		log.Println("WARNING: PROXY IS IN TEST MODE, REQUESTS WILL NOT BE BLOCKED")
