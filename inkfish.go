@@ -12,8 +12,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rcrowley/go-metrics"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,6 +21,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/rcrowley/go-metrics"
+
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Metrics struct {
@@ -84,6 +88,7 @@ func NewInkfish(signer *CertSigner) *Inkfish {
 		ResponseHeaderTimeout: 60 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
+	http2.ConfigureTransport(transport)
 	proxy := &Inkfish{
 		TLSServerConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
@@ -386,6 +391,13 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 		*sConfig = *proxy.TLSServerConfig
 	}
 	sConfig.Certificates = []tls.Certificate{cert}
+	sConfig.PreferServerCipherSuites = true
+	if !strSliceContains(sConfig.NextProtos, http2.NextProtoTLS) {
+		sConfig.NextProtos = append(sConfig.NextProtos, http2.NextProtoTLS)
+	}
+	if !strSliceContains(sConfig.NextProtos, "http/1.1") {
+		sConfig.NextProtos = append(sConfig.NextProtos, "http/1.1")
+	}
 
 	cconn, err := proxy.handshake(w, req, sConfig)
 	if err != nil {
@@ -396,15 +408,15 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	defer cconn.Close()
 
 	rp := &httputil.ReverseProxy{
-		Director: httpsDirector,
-		Transport: proxy.Transport,
+		Director:      httpsDirector,
+		Transport:     proxy.Transport,
 		FlushInterval: proxy.FlushInterval,
 	}
 
 	ch := make(chan int)
 	wc := &onCloseConn{cconn, func() { ch <- 0 }}
 
-	err = http.Serve(&oneShotListener{wc}, proxy.requestHandler(req, "https", rp))
+	err = http.Serve(&oneShotListener{wc}, h2c.NewHandler(proxy.requestHandler(req, "https", rp), &http2.Server{}))
 	if err != nil && err.Error() != "closed" {
 		proxy.Metrics.OtherErrors.Inc(1)
 		log.Println("error serving client request:", req.Host, err)
@@ -501,6 +513,15 @@ func httpsDirector(r *http.Request) {
 	unsetUserAgent(r)
 	r.URL.Host = r.Host
 	r.URL.Scheme = "https"
+}
+
+func strSliceContains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // A oneShotListener implements net.Listener whose Accept only returns a
