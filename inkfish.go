@@ -12,8 +12,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rcrowley/go-metrics"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,6 +21,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/rcrowley/go-metrics"
 )
 
 type Metrics struct {
@@ -46,6 +47,9 @@ type Inkfish struct {
 
 	// Decides whether to allow a CONNECT call by examining the host and port only
 	ConnectPolicy func(host string, port int) bool
+
+	// Supports rewriting requests that transit the proxy.
+	RequestRewrite func(*httputil.ProxyRequest)
 
 	// Generates leaf certs for TLS connections.
 	CertSigner *CertSigner
@@ -353,9 +357,17 @@ func (proxy *Inkfish) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else if req.URL.Scheme == "http" {
 		// Regular HTTP proxy requests, non-secure
 		rp := &httputil.ReverseProxy{
-			Director:      httpDirector,
 			FlushInterval: proxy.FlushInterval,
 			Transport:     proxy.Transport,
+		}
+		if proxy.RequestRewrite != nil {
+			rp.Rewrite = func(req *httputil.ProxyRequest) {
+				httpDirector(req.Out)
+
+				proxy.RequestRewrite(req)
+			}
+		} else {
+			rp.Director = httpDirector
 		}
 		proxy.requestHandler(nil, "http", rp).ServeHTTP(w, req)
 	} else {
@@ -396,9 +408,17 @@ func (proxy *Inkfish) mitmConnect(w http.ResponseWriter, req *http.Request) {
 	defer cconn.Close()
 
 	rp := &httputil.ReverseProxy{
-		Director: httpsDirector,
-		Transport: proxy.Transport,
+		Transport:     proxy.Transport,
 		FlushInterval: proxy.FlushInterval,
+	}
+	if proxy.RequestRewrite != nil {
+		rp.Rewrite = func(req *httputil.ProxyRequest) {
+			httpsDirector(req.Out)
+
+			proxy.RequestRewrite(req)
+		}
+	} else {
+		rp.Director = httpsDirector
 	}
 
 	ch := make(chan int)
